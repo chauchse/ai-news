@@ -3,6 +3,9 @@ briefing:
   max_events: 10
   min_relevance_score: 40
   lookback_hours: 72
+  business_triage:
+    max_candidates: 16
+    min_business_relevance: 2
   selection:
     security:
       target: 4

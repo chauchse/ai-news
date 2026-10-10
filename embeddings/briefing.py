@@ -58,7 +58,7 @@ TRANSLATOR = "Helsinki-NLP/opus-mt-en-fr"
 EXCLUDED = re.compile(
     r"^(veille cyber\b|revue de presse\b|newsletter\b|weekly roundup\b|weekly digest\b|"
     r"weekly recap\b|security roundup\b|bulletin hebdomadaire\b)", re.I)
-ZDI_PATTERN = re.compile(r"\bZDI-CAN-\\d+\b", re.I)
+ZDI_PATTERN = re.compile(r"\bZDI-CAN-\d+\b", re.I)
 STOPWORDS = {"the", "and", "for", "with", "from", "into", "that", "this", "are", "new",
              "des", "les", "une", "dans", "pour", "avec", "sur", "aux", "de", "du", "et",
              "flaw", "flaws", "vulnerability", "vulnerabilities", "critical", "security",
@@ -275,42 +275,144 @@ def group_category(group):
     return max(group, key=lambda a: (a["score"], a["semantic_similarity"]))["category"]
 
 
-def select_groups(groups, cfg):
-    """Flexible quotas; P1 events first, then categories, then fill unused slots."""
-    limit = int(cfg["briefing"]["max_events"])
-    selection = cfg["briefing"].get("selection", {})
-    if not selection:
-        return groups[:limit]
-    selected, chosen = [], set()
-    def take(index):
-        if index not in chosen and len(selected) < limit:
-            selected.append(groups[index])
-            chosen.add(index)
-
-    if selection.get("critical_security_override", True):
+def candidate_pool(groups, cfg):
+    """Bound Qwen workload, without sacrificing P1 candidates."""
+    settings = cfg["briefing"].get("business_triage", {})
+    cap = int(settings.get("max_candidates", 24))
+    selected, seen = [], set()
+    def add(i):
+        if i not in seen:
+            seen.add(i)
+            selected.append(groups[i])
+    for i, group in enumerate(groups):
+        if any(a["vulnerability"]["priority"] == "P1_review" for a in group):
+            add(i)
+    # Include candidates from each category, not only the globally highest scores.
+    per_category = max(3, cap // 4)
+    for category in ("security", "artificial_intelligence", "regulation_and_risk", "gaming_and_transformation"):
+        count = 0
         for i, group in enumerate(groups):
-            if any(a["vulnerability"]["priority"] == "P1_review" for a in group):
-                take(i)
+            if group_category(group) == category and count < per_category:
+                add(i)
+                count += 1
+    for i in range(len(groups)):
+        if len(selected) >= cap:
+            break
+        add(i)
+    return selected
+
+
+def business_assessments(groups, cfg):
+    """One bounded Qwen JSON request per candidate; no DB writes."""
+    settings = cfg["briefing"].get("business_triage", {})
+    pool = candidate_pool(groups, cfg)
+    print(f"Évaluation métier Qwen : {len(pool)} candidats", flush=True)
+    assessed = []
+    for index, group in enumerate(pool, 1):
+        a = max(group, key=lambda x: x["score"])
+        vuln = a["vulnerability"]
+        system = (
+            "You assess RSS news for a CTO/CISO of a PHYSICAL casino in Luxembourg, "
+            "not an online gambling or video-game company. Evaluate actual operational "
+            "relevance, not mere mentions of AI, Anthropic, Elastic or other watchlist words. "
+            "Priorities: infrastructure and ransomware security, exploited vulnerabilities, "
+            "fraud detection, continuity, operational risk, compliance in Luxembourg/EU, "
+            "practical AI adoption, process automation and data analytics. "
+            "Video game consoles, AI celebrity stories, speculative AI ethics debates, "
+            "generic crime reports and vendor PR are normally low relevance. "
+            "Do not infer affected infrastructure or regulatory applicability without evidence. "
+            "Rate business_relevance and news_importance as integers 0..5. "
+            "Assign exactly one category: security, artificial_intelligence, "
+            "regulation_and_risk, gaming_and_transformation. "
+            "Reply ONLY with JSON object keys business_relevance, news_importance, category, reason. "
+            "Reason must be a short English phrase based on the article."
+        )
+        user = (f"Title: {a['title']}\nSummary: {a['summary'][:900]}\n"
+                f"Preliminary security triage: {vuln['priority']} (unverified). "
+                f"Exploitation mentioned: {vuln['exploitation_mentioned']}. "
+                f"CVSS mentioned: {vuln['cvss']}. "
+                f"Whitelist matches: {', '.join(a['watch']['whitelist']) or 'none'}.")
+        try:
+            result = ollama_object(
+                [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                cfg["llm"]["model"], cfg["llm"].get("temperature", 0),
+                predict=160)
+            relevance = int(result["business_relevance"])
+            importance = int(result["news_importance"])
+            category = result["category"]
+            if not (0 <= relevance <= 5 and 0 <= importance <= 5 and
+                    category in ("security", "artificial_intelligence",
+                                 "regulation_and_risk", "gaming_and_transformation")):
+                raise ValueError("Qwen score/category out of range")
+            reason = str(result.get("reason", ""))[:120]
+        except Exception as exc:
+            print(f"ATTENTION évaluation {index} impossible : {exc}", file=sys.stderr)
+            # Fail closed on ordinary articles. P1 remain eligible for human review.
+            relevance, importance, category, reason = 0, 0, group_category(group), "evaluation unavailable"
+        # P1 is a candidate signal, not confirmed exploitation; keep visible for review.
+        p1 = any(x["vulnerability"]["priority"] == "P1_review" for x in group)
+        score = relevance * 12 + importance * 8
+        assessed.append({"group": group, "category": category, "business": relevance,
+                         "importance": importance, "priority": p1, "ranking": score,
+                         "reason": reason})
+        print(f"  {index:02d}/{len(pool)} [{category}] métier={relevance}/5 "
+              f"importance={importance}/5 {a['title'][:75]}", flush=True)
+    return assessed
+
+
+def select_groups(groups, cfg):
+    selection = cfg["briefing"].get("selection", {})
+    settings = cfg["briefing"].get("business_triage", {})
+    limit = int(cfg["briefing"]["max_events"])
+    assessed = business_assessments(groups, cfg)
+    minimum = int(settings.get("min_business_relevance", 2))
+    # Priority P1 reviewed first, regardless of business score.
+    ranked = sorted(assessed, key=lambda x: (x["priority"], x["ranking"],
+                     max(a["score"] for a in x["group"])), reverse=True)
+    chosen = []
+    def add(item):
+        if item not in chosen and len(chosen) < limit:
+            chosen.append(item)
+    for item in ranked:
+        if item["priority"]:
+            add(item)
     for category in ("security", "artificial_intelligence",
                      "regulation_and_risk", "gaming_and_transformation"):
         target = int(selection.get(category, {}).get("target", 0))
-        already = sum(group_category(g) == category for g in selected)
-        for i, group in enumerate(groups):
-            if already >= target or len(selected) >= limit:
+        already = sum(x["category"] == category for x in chosen)
+        for item in ranked:
+            if already >= target:
                 break
-            if i not in chosen and group_category(group) == category:
-                take(i)
+            if item["category"] == category and item["business"] >= minimum and item not in chosen:
+                add(item)
                 already += 1
     if selection.get("flexible_quotas", True):
-        for i in range(len(groups)):
-            take(i)
-    print("Répartition :", dict(Counter(group_category(g) for g in selected)), flush=True)
+        for item in ranked:
+            if item["business"] >= minimum:
+                add(item)
+    print("Répartition :", dict(Counter(x["category"] for x in chosen)), flush=True)
     print("Sélection :")
-    for group in selected:
-        a = max(group, key=lambda item: item["score"])
-        print(f"  [{group_category(group)}] {a['score']:.0f} {a['vulnerability']['priority']} "
-              f"{a['title'][:95]}", flush=True)
-    return selected
+    for item in chosen:
+        a = max(item["group"], key=lambda x: x["score"])
+        print(f"  [{item['category']}] métier={item['business']}/5 "
+              f"importance={item['importance']}/5 P1={item['priority']} "
+              f"{a['title'][:85]} — {item['reason']}", flush=True)
+    return [item["group"] for item in chosen]
+
+
+def ollama_object(messages, model, temperature, predict=320):
+    payload = {"model": model, "messages": messages, "stream": False,
+               "format": "json", "options": {"temperature": temperature,
+               "num_ctx": 3072, "num_predict": predict}, "keep_alive": "5m"}
+    request = urllib.request.Request(
+        OLLAMA_URL + "/api/chat", data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(request, timeout=360) as response:
+        answer = json.load(response)
+    result = json.loads(answer["message"]["content"])
+    if not isinstance(result, dict):
+        raise ValueError("JSON Qwen must be an object")
+    return result
 
 
 def ollama_json(messages, model, temperature):

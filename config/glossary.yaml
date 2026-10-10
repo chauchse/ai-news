@@ -11,7 +11,7 @@ protected_terms:
   - ANSSI
   - CERT-FR
   - CISA
-  - NIST
+  - NISTS
   - ENISA
   - MITRE
   - MITRE ATT&CK
@@ -433,6 +433,7 @@ translations:
     "adversaries": "adversaires"
     "cybercriminal": "cybercriminel"
     "cybercriminals": "cybercriminels"
+    "cvss score": "score cvss"
     "state-sponsored": "soutenu par un État"
     "nation-state actor": "acteur étatique"
     "advanced persistent threat": "menace persistante avancée"
