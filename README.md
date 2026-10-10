@@ -613,3 +613,73 @@ Pour les erreurs : vérifier `DATABASE_URL`, accès à PostgreSQL, résolution `
 
 Documentation V52 — 10 octobre 2026. Le fichier `sources.reference.yaml` fourni avec l'archive est une **copie de référence** de l'export, pas une nouvelle configuration déployée automatiquement.
 
+
+
+## V54 — déduplication contrôlée et diversité stratégique
+
+**Différences avec V53** :
+
+- Deuxième passe facultative de déduplication des alertes de sécurité : au plus `max_dedup_reviews` arbitrages Qwen. Les deux articles doivent mentionner au moins un **même produit reconnu** et ne pas comporter de CVE/ZDI ou de versions explicitement contradictoires. Qwen doit confirmer le même événement avec une confiance >= 0,85 et un élément de preuve textuel. En cas d'échec ou d'incertitude, les articles restent distincts. Ce mécanisme ne garantit pas l'absence de doublons et ne remplace pas une vérification humaine.
+- Importance des vulnérabilités : minimum 5/5 pour `P1_review`, 4/5 pour `P2_review`, 2/5 pour les autres candidats. Ces niveaux **priorisent la revue** et ne certifient pas la gravité réelle.
+- Présélection par rotation entre thèmes `regulation`, `risk`, `transformation`, `ai`, `other`, puis compléments sécurité. Le nombre d'évaluations Qwen reste approximativement borné par `max_candidates`, sauf P1.
+- Veille stratégique : plafonds par thème, sans remplissage artificiel ; les sujets de titres très similaires sont évités. Une rubrique peut donc contenir moins de six événements.
+- Applicabilité : sans inventaire déclaré, une simple mention d'un produit ne suffit plus pour `potential` ; le statut reste `unknown`. `confirmed` signifie uniquement présence déclarée du produit, **pas vulnérabilité confirmée**.
+
+Configuration `briefing.business_triage` :
+
+```yaml
+max_candidates: 24
+max_dedup_reviews: 6
+max_security_alerts: 4
+max_strategic_events: 6
+max_p1_overflow: 2
+min_business_relevance: 2
+strategic_topic_targets:
+  ai: 2
+  regulation: 1
+  risk: 1
+  transformation: 1
+  other: 1
+```
+
+Le classement par thème est heuristique et dépend des mots présents dans le titre et le résumé. Les objectifs ne garantissent pas que les flux contiennent des articles adéquats. Les arbitrages Qwen ajoutent jusqu'à six appels par briefing.
+
+**Test sans publication :**
+
+```bash
+cd /opt/ai-news
+sudo docker compose build embeddings
+sudo docker compose run --rm -e BRIEFING_DRY_RUN=1 embeddings python -m embeddings.briefing
+```
+
+Le DRY RUN appelle Qwen pour la déduplication et les scores, mais n'effectue ni synthèse, ni traduction, ni écriture de briefing. L'exécution de bout en bout doit être validée sur l'installation cible.
+
+
+## V55 — priorité optionnelle dans la watchlist existante
+
+La V55 conserve `/config/watchlists.yaml` comme unique configuration de whitelist/blacklist.
+Chaque règle whitelist accepte désormais `priority: high` ou `priority: normal`
+(`normal` par défaut). `watchlist.py` renvoie `whitelist_priority` en plus des
+champs historiques, sans les modifier. La priorité départage uniquement les
+articles de score métier/importance identique ; elle ne garantit pas la
+sélection et ne masque pas les vulnérabilités hors watchlist.
+
+Le bonus historique de présélection de 75 pour les articles whitelist reste
+actif : il aide ces articles à atteindre l'évaluation Qwen mais ne les fait
+pas passer au-dessus du seuil de pertinence métier final.
+
+`technology_inventory` a été supprimé du YAML : la watchlist n'est pas un
+inventaire des produits déployés. Le statut d'applicabilité reste `unknown`
+en l'absence de preuve externe, même pour les technologies suivies.
+
+L'exemple `config/watchlists.example.yaml` est indicatif : **conservez votre
+`config/watchlists.yaml` existant** et ajoutez `priority` à vos règles si
+souhaité. Remplacez `embeddings/briefing.py`, `embeddings/watchlist.py` et
+`config/briefing.yaml`, puis reconstruisez le service embeddings.
+
+```bash
+sudo docker compose build embeddings
+sudo docker compose run --rm -e BRIEFING_DRY_RUN=1 embeddings python -m embeddings.briefing
+```
+
+Le DRY RUN utilise Qwen pour l'évaluation mais ne publie rien.

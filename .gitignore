@@ -4,4 +4,5 @@ __pycache__/
 .venv/
 data/
 backups/
+config/watchlist.yaml
 *.log

@@ -270,3 +270,7 @@ sources:
   url: https://www.cssf.lu/en/feed/publications
   category: Reglementation
   enabled: true
+- name: Presse citron
+  url: https://www.presse-citron.net/feed/
+  category: Actu societé IT
+  enabled: true

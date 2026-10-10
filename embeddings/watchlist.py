@@ -16,6 +16,8 @@ def load_rules(path=PATH):
         for rule in cfg.get(kind, []):
             if not rule.get('name') or not rule.get('keywords'):
                 raise ValueError(f'{kind}: chaque règle exige name et keywords')
+            if kind == 'whitelist' and rule.get('priority', 'normal') not in ('normal', 'high'):
+                raise ValueError(f"Priorité invalide pour {rule['name']}: utilisez normal ou high")
             for pattern in rule['keywords']:
                 if rule.get('mode', 'literal') == 'regex':
                     re.compile(pattern, re.I)
@@ -39,5 +41,11 @@ def evaluate(title, summary, content='', config=None):
     matched = {k: [r['name'] for r in cfg.get(k, []) if matches(r, title, summary, content)] for k in ('whitelist', 'blacklist')}
     # Explicit absolute exclusion wins; normal blacklist cannot hide whitelisted items.
     hard = [r['name'] for r in cfg.get('blacklist', []) if r.get('absolute', False) and matches(r, title, summary, content)]
+    matched['whitelist_priority'] = (
+        'high' if any(r.get('priority', 'normal') == 'high' and
+                      matches(r, title, summary, content)
+                      for r in cfg.get('whitelist', []))
+        else 'normal' if matched['whitelist'] else 'none'
+    )
     matched['absolute_blacklist'] = hard
     return matched

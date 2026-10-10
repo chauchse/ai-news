@@ -4,7 +4,17 @@ briefing:
   min_relevance_score: 40
   lookback_hours: 72
   business_triage:
-    max_candidates: 16
+    max_candidates: 24
+    max_dedup_reviews: 6
+    strategic_topic_targets:
+      ai: 2
+      regulation: 1
+      risk: 1
+      transformation: 1
+      other: 1
+    max_security_alerts: 4
+    max_strategic_events: 6
+    max_p1_overflow: 2
     min_business_relevance: 2
   selection:
     security:
