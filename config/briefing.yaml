@@ -1,0 +1,9 @@
+briefing:
+  language: fr
+  max_events: 15
+  min_relevance_score: 40
+  lookback_hours: 48
+
+llm:
+  model: qwen2.5:3b
+  temperature: 0
