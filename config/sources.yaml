@@ -1,0 +1,256 @@
+# Flux RSS/Atom exportés depuis Feedly (OPML).
+# Les URL sont conservées telles qu'exportées ; certains flux anciens
+# pourront nécessiter une vérification ultérieure.
+sources:
+- name: Schneier on Security
+  url: http://www.schneier.com/blog/index.rdf
+  category: Securité
+  enabled: true
+- name: Darknet – Hacking Tools, Hacker News & Cyber Security
+  url: http://feeds.feedburner.com/darknethackers
+  category: Securité
+  enabled: false
+- name: Deriving Cyber Threat Intelligence and Driving Threat Hunting
+  url: http://malwarenailed.blogspot.com/feeds/posts/default?alt=rss
+  category: Securité
+  enabled: true
+- name: Microsoft Admin Center Status
+  url: https://status.office365.com/api/feed/mac
+  category: Securité
+  enabled: true
+- name: 'Sécurité informatique : Toute l’actualité sur Le Monde.fr.'
+  url: http://www.lemonde.fr/rss/tag/securite-informatique.xml
+  category: Securité
+  enabled: true
+- name: MONARC
+  url: https://www.monarc.lu/feeds/all.atom.xml
+  category: Securité
+  enabled: true
+- name: Dr. Fu's Security Blog
+  url: http://fumalwareanalysis.blogspot.com/feeds/posts/default
+  category: Securité
+  enabled: true
+- name: 'ZDI: Published Advisories'
+  url: https://www.zerodayinitiative.com/rss/published/
+  category: Securité
+  enabled: true
+- name: /dev/random
+  url: http://feeds.feedburner.com/dev/rand
+  category: Securité
+  enabled: true
+- name: ZATAZ.COM
+  url: https://www.zataz.com/rss/zataz-news.rss
+  category: Securité
+  enabled: true
+- name: UnderNews
+  url: http://feeds.feedburner.com/undernews/oCmA
+  category: Securité
+  enabled: true
+- name: Azure Status
+  url: https://azure.status.microsoft/status/feed/
+  category: Securité
+  enabled: true
+- name: Varonis Blog
+  url: http://feeds.feedburner.com/metadata-era-varonis
+  category: Securité
+  enabled: true
+- name: Trend Micro Research, News, Perspectives
+  url: http://feeds.trendmicro.com/Anti-MalwareBlog/
+  category: Securité
+  enabled: false
+- name: ClearSky Cyber Security
+  url: http://www.clearskysec.com/feed/
+  category: Securité
+  enabled: true
+- name: SCRT Team Blog
+  url: http://blog.scrt.ch/feed/
+  category: Securité
+  enabled: true
+- name: Krebs on Security
+  url: http://krebsonsecurity.com/feed/
+  category: Securité
+  enabled: true
+- name: BleepingComputer
+  url: https://www.bleepingcomputer.com/feed/
+  category: Securité
+  enabled: true
+- name: darkreading
+  url: https://www.darkreading.com/rss_simple.asp
+  category: Securité
+  enabled: false
+- name: Blog RSS Feed
+  url: http://feeds.feedburner.com/tripwire-state-of-security
+  category: Securité
+  enabled: true
+- name: Clusif
+  url: https://clusif.fr/feed/
+  category: Securité
+  enabled: true
+- name: 'ZDI: Upcoming Advisories'
+  url: https://www.zerodayinitiative.com/rss/upcoming/
+  category: Securité
+  enabled: true
+- name: Securelist
+  url: https://securelist.com/feed/
+  category: Securité
+  enabled: true
+- name: Actualités securite
+  url: http://www.lemondeinformatique.fr/flux-rss/thematique/securite/rss.xml
+  category: Securité
+  enabled: true
+- name: Sophos Blogs
+  url: http://blogs.sophos.com/feed/
+  category: Securité
+  enabled: true
+- name: Control Manager RSS
+  url: http://downloadcenter.trendmicro.com/pull/feed/product/7?region=NABU
+  category: Securité
+  enabled: true
+- name: MISP Open Source Threat Intelligence Platform & Open Standards For Threat Intelligence Sharing
+  url: http://www.misp-project.org/feed.xml
+  category: Securité
+  enabled: true
+- name: Troy Hunt's Blog
+  url: http://feeds.feedburner.com/TroyHunt
+  category: Securité
+  enabled: true
+- name: CIRCL updates
+  url: https://www.circl.lu/rss.xml
+  category: Securité
+  enabled: true
+- name: Microsoft Security Blog
+  url: https://www.microsoft.com/security/blog/feed/
+  category: Securité
+  enabled: true
+- name: Latest from TechRadar
+  url: https://www.techradar.com/rss
+  category: Securité
+  enabled: true
+- name: Security Labs – Qualys Blog
+  url: https://community.qualys.com/blogs/securitylabs/feeds/posts
+  category: Securité
+  enabled: true
+- name: Information Security
+  url: http://www.information-security.fr/feed/
+  category: Securité
+  enabled: true
+- name: The Hacker News
+  url: http://thehackernews.com/feeds/posts/default
+  category: Securité
+  enabled: true
+- name: CERT-FR
+  url: http://www.cert.ssi.gouv.fr/site/cert-fr_alerte.rss
+  category: Securité
+  enabled: true
+- name: RSS - Actualités CNIL
+  url: http://www.cnil.fr/rss-cnil/
+  category: Securité
+  enabled: true
+- name: dirkjanm.io
+  url: https://dirkjanm.io/feed.xml
+  category: Securité
+  enabled: true
+- name: Actualités du SSTIC
+  url: http://www.sstic.org/feeds/latest/
+  category: Securité
+  enabled: true
+- name: CISA Cybersecurity Advisories
+  url: https://www.us-cert.gov/ncas/alerts.xml
+  category: Securité
+  enabled: true
+- name: Zero Day Initiative - Blog
+  url: https://www.zerodayinitiative.com/blog/?format=rss
+  category: Securité
+  enabled: true
+- name: Blaze's Security Blog
+  url: http://bartblaze.blogspot.com/feeds/posts/default
+  category: Securité
+  enabled: true
+- name: Veille Cyber N59 – 11 janvier 2016
+  url: https://veillecyberland.wordpress.com/feed/
+  category: Securité
+  enabled: true
+- name: DATA SECURITY BREACH
+  url: http://datasecuritybreach.fr/feed/
+  category: Securité
+  enabled: true
+- name: 360 Netlab Blog - Network Security Research Lab at 360
+  url: http://blog.netlab.360.com/rss/
+  category: Securité
+  enabled: true
+- name: NoLimitSecu
+  url: http://www.nolimitsecu.fr/feed/
+  category: Securité
+  enabled: true
+- name: Have I Been Pwned latest breaches
+  url: http://feeds.feedburner.com/HaveIBeenPwnedLatestBreaches
+  category: Securité
+  enabled: true
+- name: Linux Journal - The Original Magazine of the Linux Community
+  url: http://www.linuxjournal.com/node/feed
+  category: Linux
+  enabled: true
+- name: ':: onpk :: blog PHP, MySQL, développement web & connexe(s)'
+  url: http://www.onpk.net/rss.xml
+  category: Php
+  enabled: true
+- name: 'Slashdot: Linux'
+  url: http://rss.slashdot.org/Slashdot/slashdotLinux
+  category: Informatique
+  enabled: true
+- name: Tech2Tech | News, Astuces, Tutos, Vidéos autour de l'informatique
+  url: http://www.tech2tech.fr/feed/
+  category: Informatique
+  enabled: true
+- name: Announcements | Microsoft Azure Blog | Microsoft Azure
+  url: http://azure.microsoft.com/blog/topics/announcements/feed/
+  category: Actu societé IT
+  enabled: true
+- name: Microsoft Azure Blog > Mark Russinovich
+  url: https://azure.microsoft.com/en-us/blog/author/markruss/feed/
+  category: Actu societé IT
+  enabled: true
+- name: Channelnews.fr - l'actualité du business de l'informatique et des télécoms
+  url: http://www.channelnews.fr/index.php?format=feed&type=rss
+  category: Actu societé IT
+  enabled: true
+- name: Azure Status
+  url: https://azurestatuscdn.azureedge.net/en-us/status/feed/
+  category: Actu societé IT
+  enabled: true
+- name: Les news de Korben
+  url: http://feeds.feedburner.com/KorbensBlog-UpgradeYourMind
+  category: Actu societé IT
+  enabled: true
+- name: Announcements | Microsoft Azure Blog | Microsoft Azure
+  url: https://azure.microsoft.com/en-us/blog/topics/updates/feed/
+  category: Actu societé IT
+  enabled: true
+- name: Global Security Mag Online
+  url: http://www.globalsecuritymag.fr/spip.php?page=backend
+  category: Technologies
+  enabled: true
+- name: AccessOWeb
+  url: http://feeds.feedburner.com/accessoweb/XGSC
+  category: Web-2.0
+  enabled: true
+- name: FredCavazza.net
+  url: http://www.fredcavazza.net/feed/
+  category: Web-2.0
+  enabled: true
+- name: Cybernetica
+  url: https://www.codesouverain.fr/rss/
+  category: Cloud
+  enabled: true
+- name: Silicon
+  url: http://www.silicon.fr/feed
+  category: Divers
+  enabled: true
+- name: Le Journal du Geek
+  url: http://feeds2.feedburner.com/LeJournalduGeek
+  category: Divers
+  enabled: true
+- name: LesCasinos.org - Actualités
+  url: http://www.lescasinos.org/rss/flux.xml
+  category: Divers
+  enabled: true

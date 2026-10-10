@@ -1,0 +1,37 @@
+topics:
+  - name: Cybersecurity
+    weight: 60
+    keywords:
+      - vulnerability
+      - exploit
+      - ransomware
+      - malware
+      - zero-day
+      - cve-
+      - breach
+      - cyberattack
+      - vulnérabilité
+      - cyberattaque
+
+  - name: Artificial Intelligence
+    weight: 55
+    keywords:
+      - artificial intelligence
+      - machine learning
+      - llm
+      - generative ai
+      - openai
+      - deep learning
+      - intelligence artificielle
+
+  - name: Infrastructure
+    weight: 40
+    keywords:
+      - linux
+      - kubernetes
+      - docker
+      - elasticsearch
+      - cloud computing
+      - virtualization
+      - vmware
+      - infrastructure

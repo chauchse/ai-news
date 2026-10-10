@@ -17,5 +17,33 @@ services:
       timeout: 5s
       retries: 5
 
+  collector:
+    build:
+      context: .
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SOURCES_FILE: /app/config/sources.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  embeddings:
+    build:
+      context: .
+      dockerfile: embeddings/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      HF_HOME: /models
+      OMP_NUM_THREADS: "4"
+    volumes:
+      - embeddings_models:/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 4g
+    profiles:
+      - ai
+
 volumes:
   postgres_data:
+  embeddings_models:

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 from app.normalizer import normalize_text
+import urllib.request
 
 import feedparser
 import psycopg
@@ -88,10 +89,29 @@ def main():
                     run_id = cur.fetchone()[0]
 
                 # Request the feed with a timeout; do not trust feed contents.
-                feed = feedparser.parse(
+                request = urllib.request.Request(
                     feed_url,
-                    request_headers={"User-Agent": "AI-News/0.1"},
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (X11; Linux x86_64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/120.0.0.0 Safari/537.36"
+                        ),
+                        "Accept": (
+                            "application/rss+xml, application/atom+xml, "
+                            "application/xml, text/xml;q=0.9, */*;q=0.8"
+                        ),
+                        "Accept-Language": "en-US,en;q=0.9,fr;q=0.8",
+                    },
                 )
+
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    feed_data = response.read(10 * 1024 * 1024 + 1)
+
+                if len(feed_data) > 10 * 1024 * 1024:
+                    raise ValueError("Flux RSS trop volumineux (> 10 Mo)")
+
+                feed = feedparser.parse(feed_data)
 
                 if feed.bozo and not feed.entries:
                     raise ValueError(
@@ -190,26 +210,14 @@ def main():
                         )
                         source_id = cur.fetchone()[0]
 
-                        if run_id is not None:
-                            cur.execute(
-                                """
-                                UPDATE collection_runs
-                                SET finished_at = NOW(),
-                                    status = 'failed',
-                                    error_message = %s
-                                WHERE id = %s
-                                """,
-                                (str(exc)[:4000], run_id),
-                            )
-                        else:
-                            cur.execute(
-                                """
-                                INSERT INTO collection_runs
-                                    (source_id, finished_at, status, error_message)
-                                VALUES (%s, NOW(), 'failed', %s)
-                                """,
-                                (source_id, str(exc)[:4000]),
-                            )
+                        cur.execute(
+                            """
+                            INSERT INTO collection_runs
+                                (source_id, finished_at, status, error_message)
+                            VALUES (%s, NOW(), 'failed', %s)
+                            """,
+                            (source_id, str(exc)[:4000]),
+                        )
                     conn.commit()
 
                 except Exception:
