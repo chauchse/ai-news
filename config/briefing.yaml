@@ -7,3 +7,33 @@ briefing:
 llm:
   model: qwen2.5:3b
   temperature: 0
+
+scoring:
+  rescore_all: true
+  domains:
+    artificial_intelligence:
+      weight: 25
+    cybersecurity:
+      weight: 25
+    risk_management:
+      weight: 20
+    digital_transformation:
+      weight: 15
+    regulation:
+      weight: 10
+    gaming_industry:
+      weight: 5
+
+  business_context:
+    country: LU
+    industry: casino
+    priorities:
+      - ai_adoption
+      - fraud_detection
+      - operational_risk
+      - business_continuity
+      - process_automation
+      - data_analytics
+      - infrastructure_security
+
+  online_gaming_priority: low
