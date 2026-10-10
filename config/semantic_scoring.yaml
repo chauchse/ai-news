@@ -1,0 +1,55 @@
+# Profils métier pour une veille RSSI / CTO d'un casino au Luxembourg.
+# Scores exploratoires : ils ne mesurent ni la probabilité d'incident ni la gravité CVSS.
+lookback_days: 7
+# 0 = tous les articles sur la fenêtre
+test_limit: 0
+similarity_floor: 0.30
+similarity_ceiling: 0.80
+batch_size: 24
+
+domains:
+  - name: cybersecurity
+    weight: 25
+    descriptions:
+      - "Critical cybersecurity vulnerabilities actively exploited in enterprise networks, remote access appliances, ransomware attacks and incident response."
+      - "Vulnérabilités exploitées, cyberattaques, compromissions, protection des données et sécurité des systèmes d'information."
+      - "Security operations center, threat detection, SIEM, network security and identity protection."
+
+  - name: artificial_intelligence
+    weight: 25
+    descriptions:
+      - "Practical adoption of artificial intelligence in business, local language models, AI agents and automation of complex workflows."
+      - "Applications concrètes de l'intelligence artificielle, analyse prédictive, détection de fraude, exploitation des données et agents IA."
+      - "AI governance, security of large language models, retrieval augmented generation and open source AI systems."
+
+  - name: risk_management
+    weight: 20
+    descriptions:
+      - "Enterprise risk management, operational risk, internal controls, fraud prevention, business continuity and disaster recovery."
+      - "Gestion des risques opérationnels, lutte contre la fraude, contrôle interne, continuité d'activité et risques liés aux prestataires."
+      - "Financial transaction monitoring, anti money laundering controls, compliance risks and governance in regulated businesses."
+
+  - name: digital_transformation
+    weight: 15
+    descriptions:
+      - "Digital transformation of business operations, process automation, enterprise integration and paperless workflows."
+      - "Digitalisation des processus, dématérialisation, automatisation administrative, gouvernance et valorisation des données."
+      - "Modernizing legacy information systems, API integration, enterprise architecture and workflow orchestration."
+
+  - name: regulation
+    weight: 10
+    descriptions:
+      - "European Union and Luxembourg cybersecurity, privacy, artificial intelligence and anti money laundering regulations."
+      - "Conformité réglementaire au Luxembourg et en Europe, RGPD, protection des données, gouvernance IA et obligations de sécurité."
+
+  - name: infrastructure
+    weight: 5
+    descriptions:
+      - "Enterprise IT infrastructure, Linux, virtualization, VMware, Docker, Kubernetes, Elasticsearch and cloud architecture."
+      - "Infrastructure informatique, supervision, sauvegarde, disponibilité des services et exploitation des plateformes techniques."
+
+  - name: gaming_industry
+    weight: 5
+    descriptions:
+      - "Technology and operational management of physical casinos, gaming machines, casino surveillance, cash handling and gaming systems."
+      - "Technologies des casinos terrestres, systèmes de caisse, machines à sous, contrôle des opérations et sécurité des établissements de jeux."

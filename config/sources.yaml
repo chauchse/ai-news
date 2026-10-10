@@ -209,7 +209,7 @@ sources:
 - name: Microsoft Azure Blog > Mark Russinovich
   url: https://azure.microsoft.com/en-us/blog/author/markruss/feed/
   category: Actu societé IT
-  enabled: true
+  enabled: false
 - name: Channelnews.fr - l'actualité du business de l'informatique et des télécoms
   url: http://www.channelnews.fr/index.php?format=feed&type=rss
   category: Actu societé IT
@@ -252,5 +252,21 @@ sources:
   enabled: true
 - name: LesCasinos.org - Actualités
   url: http://www.lescasinos.org/rss/flux.xml
-  category: Divers
+  category: Casino
+  enabled: true
+- name: OpenAI News
+  url: https://openai.com/news/rss.xml
+  category: Intelligence artificielle
+  enabled: true
+- name: Google DeepMind
+  url: https://deepmind.google/blog/rss.xml
+  category: Intelligence artificielle
+  enabled: true
+- name: MIT Technology Review - Artificial Intelligence
+  url: https://www.technologyreview.com/topic/artificial-intelligence/feed/
+  category: Intelligence artificielle
+  enabled: true
+- name: CSSF - Publications
+  url: https://www.cssf.lu/en/feed/publications
+  category: Reglementation
   enabled: true

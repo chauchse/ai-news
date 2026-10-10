@@ -1,8 +1,19 @@
 briefing:
   language: fr
-  max_events: 5
+  max_events: 10
   min_relevance_score: 40
-  lookback_hours: 48
+  lookback_hours: 72
+  selection:
+    security:
+      target: 4
+    artificial_intelligence:
+      target: 3
+    regulation_and_risk:
+      target: 2
+    gaming_and_transformation:
+      target: 1
+    flexible_quotas: true
+    critical_security_override: true
 
 llm:
   model: qwen2.5:3b
@@ -23,7 +34,6 @@ scoring:
       weight: 10
     gaming_industry:
       weight: 5
-
   business_context:
     country: LU
     industry: casino
@@ -35,5 +45,4 @@ scoring:
       - process_automation
       - data_analytics
       - infrastructure_security
-
   online_gaming_priority: low
