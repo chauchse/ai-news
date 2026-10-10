@@ -42,7 +42,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    mem_limit: 4g
+    mem_limit: 6g
     profiles:
       - ai
 

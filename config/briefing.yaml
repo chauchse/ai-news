@@ -1,6 +1,6 @@
 briefing:
   language: fr
-  max_events: 15
+  max_events: 5
   min_relevance_score: 40
   lookback_hours: 48
 

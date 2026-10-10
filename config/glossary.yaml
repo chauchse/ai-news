@@ -1,0 +1,888 @@
+# ============================================================
+# AI NEWS - CYBERSECURITY GLOSSARY
+# English / French
+# ============================================================
+
+protected_terms:
+
+  # ----------------------------------------------------------
+  # Organismes, référentiels et standards
+  # ----------------------------------------------------------
+  - ANSSI
+  - CERT-FR
+  - CISA
+  - NIST
+  - ENISA
+  - MITRE
+  - MITRE ATT&CK
+  - MITRE D3FEND
+  - OWASP
+  - FIRST
+  - CIS
+  - ISO 27001
+  - ISO 27002
+  - ISO 27005
+  - ISO 27035
+  - IEC 62443
+  - NIS2
+  - DORA
+  - GDPR
+  - RGPD
+  - CVE
+  - CVSS
+  - CWE
+  - CAPEC
+  - CPE
+  - KEV
+  - EPSS
+  - STIX
+  - TAXII
+  - TLP
+  - OCSF
+  - ECS
+  - Sigma
+  - YARA
+  - YARA-L
+  - OpenIOC
+  - CVSS v3
+  - CVSS v4
+
+  # ----------------------------------------------------------
+  # Éditeurs et produits de sécurité
+  # ----------------------------------------------------------
+  - Elastic
+  - Elasticsearch
+  - Kibana
+  - Logstash
+  - Elastic Agent
+  - Elastic Security
+  - Elastic Defend
+  - Elastic SIEM
+  - Fleet
+  - Beats
+  - Winlogbeat
+  - Filebeat
+  - Packetbeat
+  - Auditbeat
+  - CrowdStrike
+  - Falcon
+  - SentinelOne
+  - Singularity
+  - Microsoft Defender
+  - Microsoft Defender for Endpoint
+  - Microsoft Sentinel
+  - Microsoft Entra ID
+  - Microsoft Intune
+  - Microsoft Purview
+  - Splunk
+  - Splunk Enterprise Security
+  - QRadar
+  - Wazuh
+  - Suricata
+  - Snort
+  - Zeek
+  - Security Onion
+  - Cortex XSOAR
+  - Cortex XDR
+  - Palo Alto Networks
+  - Fortinet
+  - FortiGate
+  - FortiOS
+  - FortiAnalyzer
+  - Check Point
+  - Sophos
+  - Trend Micro
+  - Trellix
+  - ESET
+  - Bitdefender
+  - Proofpoint
+  - Mimecast
+  - Rapid7
+  - InsightVM
+  - Tenable
+  - Nessus
+  - Qualys
+  - OpenVAS
+  - Greenbone
+  - Burp Suite
+  - Metasploit
+  - Nmap
+  - Wireshark
+  - Shodan
+  - Censys
+  - VirusTotal
+  - MISP
+  - OpenCTI
+  - TheHive
+  - Cortex
+  - Velociraptor
+  - osquery
+  - Sysmon
+  - Sysinternals
+  - Volatility
+  - Autopsy
+
+  # ----------------------------------------------------------
+  # Constructeurs et plateformes
+  # ----------------------------------------------------------
+  - Microsoft
+  - Windows
+  - Windows Server
+  - Active Directory
+  - Azure
+  - Azure AD
+  - AWS
+  - Amazon Web Services
+  - Google Cloud
+  - GCP
+  - Google Workspace
+  - VMware
+  - vSphere
+  - ESXi
+  - vCenter
+  - Omnissa
+  - Horizon
+  - Citrix
+  - NetScaler
+  - Cisco
+  - Cisco IOS
+  - Cisco ASA
+  - Juniper
+  - Junos
+  - SonicWall
+  - SMA1000
+  - Ivanti
+  - Connect Secure
+  - Pulse Secure
+  - F5
+  - BIG-IP
+  - AhsayCBS
+  - Microsoft Edge
+  - Chrome
+  - Firefox
+  - Linux
+  - Ubuntu
+  - Debian
+  - Red Hat
+  - RHEL
+  - Rocky Linux
+  - AlmaLinux
+  - Kubernetes
+  - Docker
+  - OpenShift
+  - Terraform
+  - Ansible
+  - GitLab
+  - GitHub
+  - Jenkins
+  - Apache
+  - Nginx
+  - PostgreSQL
+  - MySQL
+  - Redis
+  - ProFTPD
+  - OpenSSH
+  - OpenSSL
+  - sudo
+  - wpa_supplicant
+
+  # ----------------------------------------------------------
+  # Groupes de menace et campagnes
+  # ----------------------------------------------------------
+  - APT28
+  - APT29
+  - APT31
+  - APT41
+  - Lazarus
+  - Lazarus Group
+  - Sandworm
+  - Turla
+  - Gamaredon
+  - Kimsuky
+  - MuddyWater
+  - OilRig
+  - Charming Kitten
+  - Volt Typhoon
+  - Flax Typhoon
+  - Salt Typhoon
+  - Silk Typhoon
+  - Scattered Spider
+  - ShinyHunters
+  - FIN7
+  - FIN8
+  - FIN11
+  - TA505
+  - TA551
+  - UNC2452
+  - LockBit
+  - BlackCat
+  - ALPHV
+  - Clop
+  - Cl0p
+  - Akira
+  - Play
+  - Black Basta
+  - RansomHub
+  - Qilin
+  - Rhysida
+  - Medusa
+  - DragonForce
+  - Conti
+  - REvil
+  - DarkSide
+  - BlackMatter
+  - Hive
+  - Royal
+  - 8Base
+
+  # ----------------------------------------------------------
+  # Malwares, outils et frameworks
+  # ----------------------------------------------------------
+  - XMRig
+  - Cobalt Strike
+  - Sliver
+  - Brute Ratel
+  - Empire
+  - Metasploit Framework
+  - Mimikatz
+  - Rubeus
+  - BloodHound
+  - SharpHound
+  - Impacket
+  - PsExec
+  - PowerShell
+  - PowerShell Empire
+  - LOLBAS
+  - GTFOBins
+  - Living off the Land
+  - TrickBot
+  - Emotet
+  - QakBot
+  - Qbot
+  - IcedID
+  - Bumblebee
+  - BazarLoader
+  - SmokeLoader
+  - AsyncRAT
+  - Remcos
+  - Agent Tesla
+  - RedLine
+  - Lumma
+  - FormBook
+  - XLoader
+  - PlugX
+  - ShadowPad
+  - Gh0st RAT
+  - QuasarRAT
+  - njRAT
+  - DarkComet
+  - Mirai
+  - Mozi
+  - Gafgyt
+  - P2PInfect
+  - WannaCry
+  - NotPetya
+  - Stuxnet
+  - Industroyer
+  - Triton
+  - BlackEnergy
+
+  # ----------------------------------------------------------
+  # Protocoles, technologies et identifiants
+  # ----------------------------------------------------------
+  - TCP
+  - UDP
+  - IP
+  - IPv4
+  - IPv6
+  - DNS
+  - DNSSEC
+  - DNS-over-HTTPS
+  - DoH
+  - DoT
+  - HTTP
+  - HTTPS
+  - HTTP/2
+  - HTTP/3
+  - TLS
+  - SSL
+  - SSH
+  - RDP
+  - SMB
+  - SMBv1
+  - SMBv2
+  - SMBv3
+  - LDAP
+  - LDAPS
+  - Kerberos
+  - NTLM
+  - SAML
+  - OAuth
+  - OAuth 2.0
+  - OpenID Connect
+  - OIDC
+  - JWT
+  - MFA
+  - FIDO2
+  - WebAuthn
+  - SSO
+  - PAM
+  - IAM
+  - IGA
+  - PKI
+  - HSM
+  - TPM
+  - AES
+  - RSA
+  - SHA-256
+  - SHA-1
+  - MD5
+  - X.509
+  - IPsec
+  - WireGuard
+  - OpenVPN
+  - BGP
+  - SNMP
+  - SMTP
+  - IMAP
+  - POP3
+  - NTP
+  - Syslog
+  - RFC 5424
+  - JSON
+  - YAML
+  - XML
+  - REST
+  - GraphQL
+  - API
+  - CLI
+  - SQL
+  - ES|QL
+  - KQL
+  - EQL
+  - Lucene
+  - Sigma
+  - YARA
+
+  # ----------------------------------------------------------
+  # Concepts courants à conserver selon le contexte
+  # ----------------------------------------------------------
+  - Zero Trust
+  - DevSecOps
+  - SecOps
+  - XDR
+  - EDR
+  - NDR
+  - MDR
+  - SIEM
+  - SOAR
+  - SOC
+  - CSIRT
+  - CERT
+  - CTI
+  - OSINT
+  - DFIR
+  - IOC
+  - IOA
+  - TTP
+  - DLP
+  - CASB
+  - SASE
+  - SSE
+  - CSPM
+  - CWPP
+  - CNAPP
+  - CIEM
+  - SBOM
+  - SAST
+  - DAST
+  - IAST
+  - RASP
+  - WAF
+  - IDS
+  - IPS
+  - NGFW
+  - NAC
+  - ZTNA
+  - BYOD
+  - OT
+  - ICS
+  - SCADA
+  - PLC
+  - HMI
+  - IIoT
+
+
+# ============================================================
+# TRADUCTIONS ANGLAIS -> FRANÇAIS
+# ============================================================
+
+translations:
+  en-fr:
+
+    # --------------------------------------------------------
+    # Acteurs et renseignement sur les menaces
+    # --------------------------------------------------------
+    "threat actor": "acteur malveillant"
+    "threat actors": "acteurs malveillants"
+    "malicious actor": "acteur malveillant"
+    "malicious actors": "acteurs malveillants"
+    "attacker": "attaquant"
+    "attackers": "attaquants"
+    "adversary": "adversaire"
+    "adversaries": "adversaires"
+    "cybercriminal": "cybercriminel"
+    "cybercriminals": "cybercriminels"
+    "state-sponsored": "soutenu par un État"
+    "nation-state actor": "acteur étatique"
+    "advanced persistent threat": "menace persistante avancée"
+    "threat intelligence": "renseignement sur les cybermenaces"
+    "cyber threat intelligence": "renseignement sur les cybermenaces"
+    "threat hunting": "recherche proactive de menaces"
+    "threat landscape": "panorama des menaces"
+    "threat campaign": "campagne malveillante"
+    "attack campaign": "campagne d'attaques"
+    "attack surface": "surface d'attaque"
+    "attack vector": "vecteur d'attaque"
+    "attack chain": "chaîne d'attaque"
+    "kill chain": "chaîne d'attaque"
+    "initial access": "accès initial"
+    "initial access broker": "courtier en accès initial"
+    "lateral movement": "déplacement latéral"
+    "privilege escalation": "élévation de privilèges"
+    "persistence": "persistance"
+    "defense evasion": "contournement des mécanismes de défense"
+    "credential access": "accès aux identifiants"
+    "credential theft": "vol d'identifiants"
+    "data exfiltration": "exfiltration de données"
+    "command and control": "commande et contrôle"
+    "reconnaissance": "reconnaissance"
+    "discovery": "découverte"
+    "collection": "collecte"
+    "impact": "impact"
+
+    # --------------------------------------------------------
+    # Vulnérabilités et exploitation
+    # --------------------------------------------------------
+    "vulnerability": "vulnérabilité"
+    "vulnerabilities": "vulnérabilités"
+    "security flaw": "faille de sécurité"
+    "security flaws": "failles de sécurité"
+    "flaw": "faille"
+    "flaws": "failles"
+    "bug": "défaut logiciel"
+    "security bug": "faille de sécurité"
+    "critical vulnerability": "vulnérabilité critique"
+    "high-severity vulnerability": "vulnérabilité de gravité élevée"
+    "maximum-severity vulnerability": "vulnérabilité de gravité maximale"
+    "zero-day vulnerability": "vulnérabilité zero-day"
+    "zero-day exploit": "exploit zero-day"
+    "n-day vulnerability": "vulnérabilité connue"
+    "unpatched vulnerability": "vulnérabilité non corrigée"
+    "unpatched flaw": "faille non corrigée"
+    "actively exploited": "activement exploitée"
+    "exploited in the wild": "exploitée dans des attaques réelles"
+    "proof of concept": "preuve de concept"
+    "proof-of-concept exploit": "code d'exploitation de démonstration"
+    "exploit code": "code d'exploitation"
+    "exploit chain": "chaîne d'exploitation"
+    "remote code execution": "exécution de code à distance"
+    "arbitrary code execution": "exécution de code arbitraire"
+    "local privilege escalation": "élévation locale de privilèges"
+    "authentication bypass": "contournement de l'authentification"
+    "authorization bypass": "contournement des contrôles d'autorisation"
+    "access control bypass": "contournement du contrôle d'accès"
+    "security bypass": "contournement d'une protection de sécurité"
+    "buffer overflow": "dépassement de tampon"
+    "heap overflow": "dépassement de tampon dans le tas"
+    "stack overflow": "dépassement de pile"
+    "integer overflow": "dépassement d'entier"
+    "use-after-free": "utilisation après libération de mémoire"
+    "out-of-bounds read": "lecture hors limites"
+    "out-of-bounds write": "écriture hors limites"
+    "race condition": "condition de concurrence"
+    "directory traversal": "traversée de répertoires"
+    "path traversal": "traversée de chemins"
+    "SQL injection": "injection SQL"
+    "command injection": "injection de commandes"
+    "code injection": "injection de code"
+    "cross-site scripting": "injection de scripts intersites"
+    "cross-site request forgery": "falsification de requête intersites"
+    "server-side request forgery": "falsification de requête côté serveur"
+    "XML external entity": "entité externe XML"
+    "insecure deserialization": "désérialisation non sécurisée"
+    "supply chain attack": "attaque de la chaîne d'approvisionnement"
+    "dependency confusion": "confusion de dépendances"
+    "typosquatting": "usurpation par similitude de nom"
+    "malicious package": "paquet logiciel malveillant"
+    "patch": "correctif"
+    "security patch": "correctif de sécurité"
+    "patch management": "gestion des correctifs"
+    "patched": "corrigé"
+    "unpatched": "non corrigé"
+    "mitigation": "mesure d'atténuation"
+    "workaround": "solution de contournement"
+    "security advisory": "avis de sécurité"
+    "vulnerability disclosure": "divulgation de vulnérabilité"
+    "responsible disclosure": "divulgation responsable"
+    "coordinated disclosure": "divulgation coordonnée"
+    "affected versions": "versions affectées"
+    "affected systems": "systèmes affectés"
+    "attack complexity": "complexité de l'attaque"
+    "exploitability": "exploitabilité"
+    "severity": "gravité"
+
+    # --------------------------------------------------------
+    # Malwares et attaques
+    # --------------------------------------------------------
+    "malware": "logiciel malveillant"
+    "malicious software": "logiciel malveillant"
+    "ransomware": "rançongiciel"
+    "ransomware attack": "attaque par rançongiciel"
+    "ransomware gang": "groupe de rançongiciel"
+    "ransomware-as-a-service": "rançongiciel en tant que service"
+    "infostealer": "logiciel voleur d'informations"
+    "information stealer": "logiciel voleur d'informations"
+    "stealer": "logiciel voleur d'informations"
+    "trojan": "cheval de Troie"
+    "banking trojan": "cheval de Troie bancaire"
+    "remote access trojan": "cheval de Troie d'accès distant"
+    "backdoor": "porte dérobée"
+    "web shell": "web shell"
+    "web shells": "web shells"
+    "rootkit": "rootkit"
+    "bootkit": "bootkit"
+    "keylogger": "enregistreur de frappes"
+    "spyware": "logiciel espion"
+    "adware": "logiciel publicitaire"
+    "worm": "ver informatique"
+    "botnet": "réseau de machines compromises"
+    "bot": "machine automatisée"
+    "dropper": "programme d'installation malveillant"
+    "loader": "chargeur malveillant"
+    "payload": "charge utile"
+    "malicious payload": "charge utile malveillante"
+    "cryptominer": "mineur de cryptomonnaie"
+    "cryptocurrency miner": "mineur de cryptomonnaie"
+    "cryptocurrency miners": "mineurs de cryptomonnaie"
+    "cryptojacking": "minage clandestin de cryptomonnaie"
+    "fileless malware": "logiciel malveillant sans fichier"
+    "living-off-the-land attack": "attaque utilisant les outils légitimes du système"
+    "malvertising": "publicité malveillante"
+    "drive-by download": "téléchargement furtif"
+    "watering hole attack": "attaque par point d'eau"
+    "phishing": "hameçonnage"
+    "spear phishing": "hameçonnage ciblé"
+    "whaling": "hameçonnage visant les dirigeants"
+    "smishing": "hameçonnage par SMS"
+    "vishing": "hameçonnage vocal"
+    "quishing": "hameçonnage par QR code"
+    "business email compromise": "compromission de messagerie professionnelle"
+    "email spoofing": "usurpation d'adresse électronique"
+    "domain spoofing": "usurpation de domaine"
+    "DNS spoofing": "usurpation DNS"
+    "credential stuffing": "bourrage d'identifiants"
+    "password spraying": "pulvérisation de mots de passe"
+    "brute-force attack": "attaque par force brute"
+    "dictionary attack": "attaque par dictionnaire"
+    "session hijacking": "détournement de session"
+    "cookie theft": "vol de cookies"
+    "token theft": "vol de jetons d'authentification"
+    "man-in-the-middle": "attaque de l'homme du milieu"
+    "adversary-in-the-middle": "attaque par interception active"
+    "replay attack": "attaque par rejeu"
+    "denial of service": "déni de service"
+    "distributed denial of service": "déni de service distribué"
+    "DDoS attack": "attaque DDoS"
+    "data breach": "violation de données"
+    "data leak": "fuite de données"
+    "data theft": "vol de données"
+    "account takeover": "prise de contrôle de compte"
+    "compromised account": "compte compromis"
+    "compromised credentials": "identifiants compromis"
+    "insider threat": "menace interne"
+    "social engineering": "ingénierie sociale"
+    "deepfake": "hypertrucage"
+
+    # --------------------------------------------------------
+    # SOC, SIEM, détection et réponse
+    # --------------------------------------------------------
+    "security operations center": "centre opérationnel de sécurité"
+    "security monitoring": "surveillance de sécurité"
+    "security event": "événement de sécurité"
+    "security incident": "incident de sécurité"
+    "security alert": "alerte de sécurité"
+    "alert fatigue": "fatigue liée aux alertes"
+    "false positive": "faux positif"
+    "false negative": "faux négatif"
+    "true positive": "vrai positif"
+    "detection rule": "règle de détection"
+    "detection engineering": "ingénierie de détection"
+    "detection coverage": "couverture de détection"
+    "detection gap": "lacune de détection"
+    "alert triage": "qualification des alertes"
+    "triage": "qualification"
+    "incident response": "réponse à incident"
+    "incident handling": "gestion des incidents"
+    "incident investigation": "investigation d'incident"
+    "forensic analysis": "analyse forensique"
+    "digital forensics": "investigation numérique"
+    "root cause analysis": "analyse des causes racines"
+    "containment": "confinement"
+    "eradication": "éradication"
+    "recovery": "rétablissement"
+    "remediation": "remédiation"
+    "post-incident review": "retour d'expérience après incident"
+    "lessons learned": "enseignements tirés"
+    "playbook": "procédure opérationnelle"
+    "runbook": "procédure d'exploitation"
+    "case management": "gestion des dossiers d'investigation"
+    "security case": "dossier d'investigation"
+    "event correlation": "corrélation d'événements"
+    "log correlation": "corrélation de journaux"
+    "log ingestion": "ingestion de journaux"
+    "log parsing": "analyse syntaxique des journaux"
+    "log normalization": "normalisation des journaux"
+    "data enrichment": "enrichissement des données"
+    "threat detection": "détection des menaces"
+    "behavioral detection": "détection comportementale"
+    "anomaly detection": "détection d'anomalies"
+    "signature-based detection": "détection par signature"
+    "indicator of compromise": "indicateur de compromission"
+    "indicator of attack": "indicateur d'attaque"
+    "dwell time": "durée de présence de l'attaquant"
+    "mean time to detect": "temps moyen de détection"
+    "mean time to respond": "temps moyen de réponse"
+    "mean time to contain": "temps moyen de confinement"
+    "alert suppression": "suppression des alertes répétitives"
+    "alert deduplication": "déduplication des alertes"
+    "event aggregation": "agrégation des événements"
+    "noise reduction": "réduction du bruit"
+    "risk score": "score de risque"
+    "risk-based alerting": "détection fondée sur le risque"
+    "severity score": "score de gravité"
+    "confidence score": "score de confiance"
+
+    # --------------------------------------------------------
+    # Identités et accès
+    # --------------------------------------------------------
+    "identity and access management": "gestion des identités et des accès"
+    "identity provider": "fournisseur d'identité"
+    "service account": "compte de service"
+    "privileged account": "compte privilégié"
+    "administrator account": "compte administrateur"
+    "user account": "compte utilisateur"
+    "machine account": "compte machine"
+    "authentication": "authentification"
+    "authorization": "autorisation"
+    "access control": "contrôle d'accès"
+    "least privilege": "moindre privilège"
+    "privileged access management": "gestion des accès privilégiés"
+    "multi-factor authentication": "authentification multifacteur"
+    "two-factor authentication": "authentification à deux facteurs"
+    "single sign-on": "authentification unique"
+    "conditional access": "accès conditionnel"
+    "passwordless authentication": "authentification sans mot de passe"
+    "passkey": "clé d'accès"
+    "passkeys": "clés d'accès"
+    "access token": "jeton d'accès"
+    "refresh token": "jeton de rafraîchissement"
+    "session token": "jeton de session"
+    "access key": "clé d'accès"
+    "API key": "clé API"
+    "secret key": "clé secrète"
+    "credential": "identifiant d'authentification"
+    "credentials": "identifiants d'authentification"
+    "password hash": "empreinte de mot de passe"
+    "password cracking": "cassage de mots de passe"
+    "account lockout": "verrouillage de compte"
+    "failed login": "échec de connexion"
+    "successful login": "connexion réussie"
+    "suspicious login": "connexion suspecte"
+    "impossible travel": "déplacement impossible"
+    "token replay": "rejeu de jeton"
+    "session fixation": "fixation de session"
+    "Kerberoasting": "Kerberoasting"
+    "AS-REP roasting": "AS-REP roasting"
+    "pass-the-hash": "pass-the-hash"
+    "pass-the-ticket": "pass-the-ticket"
+    "golden ticket": "golden ticket"
+    "silver ticket": "silver ticket"
+    "DCSync": "DCSync"
+    "DCShadow": "DCShadow"
+
+    # --------------------------------------------------------
+    # Réseaux, cloud et infrastructure
+    # --------------------------------------------------------
+    "firewall": "pare-feu"
+    "network firewall": "pare-feu réseau"
+    "web application firewall": "pare-feu applicatif web"
+    "intrusion detection": "détection d'intrusion"
+    "intrusion prevention": "prévention des intrusions"
+    "network segmentation": "segmentation réseau"
+    "microsegmentation": "microsegmentation"
+    "network traffic": "trafic réseau"
+    "network packet": "paquet réseau"
+    "packet capture": "capture de paquets"
+    "deep packet inspection": "inspection approfondie des paquets"
+    "network flow": "flux réseau"
+    "east-west traffic": "trafic est-ouest"
+    "north-south traffic": "trafic nord-sud"
+    "command-and-control server": "serveur de commande et contrôle"
+    "malicious domain": "domaine malveillant"
+    "malicious IP address": "adresse IP malveillante"
+    "DNS tunneling": "tunnelisation DNS"
+    "DNS poisoning": "empoisonnement DNS"
+    "domain generation algorithm": "algorithme de génération de domaines"
+    "cloud security": "sécurité du cloud"
+    "cloud workload": "charge de travail cloud"
+    "cloud misconfiguration": "mauvaise configuration cloud"
+    "exposed storage bucket": "compartiment de stockage exposé"
+    "publicly exposed": "exposé publiquement"
+    "internet-facing": "exposé à Internet"
+    "attack surface management": "gestion de la surface d'attaque"
+    "asset discovery": "découverte des actifs"
+    "asset inventory": "inventaire des actifs"
+    "vulnerability scanning": "analyse des vulnérabilités"
+    "penetration testing": "test d'intrusion"
+    "red teaming": "simulation d'attaque"
+    "blue teaming": "défense opérationnelle"
+    "purple teaming": "collaboration entre équipes offensives et défensives"
+    "security assessment": "évaluation de sécurité"
+    "security posture": "posture de sécurité"
+    "hardening": "durcissement"
+    "secure configuration": "configuration sécurisée"
+    "baseline": "configuration de référence"
+    "configuration drift": "dérive de configuration"
+    "backup": "sauvegarde"
+    "restore": "restauration"
+    "disaster recovery": "reprise après sinistre"
+    "business continuity": "continuité d'activité"
+
+    # --------------------------------------------------------
+    # Sécurité applicative et développement
+    # --------------------------------------------------------
+    "application security": "sécurité applicative"
+    "secure development": "développement sécurisé"
+    "secure coding": "programmation sécurisée"
+    "code review": "revue de code"
+    "static analysis": "analyse statique"
+    "dynamic analysis": "analyse dynamique"
+    "software composition analysis": "analyse de composition logicielle"
+    "dependency scanning": "analyse des dépendances"
+    "container scanning": "analyse des conteneurs"
+    "image scanning": "analyse des images de conteneurs"
+    "secret scanning": "détection de secrets"
+    "code signing": "signature de code"
+    "software supply chain": "chaîne d'approvisionnement logicielle"
+    "software bill of materials": "nomenclature logicielle"
+    "build pipeline": "chaîne de compilation"
+    "CI/CD pipeline": "pipeline CI/CD"
+    "repository": "dépôt de code"
+    "source code": "code source"
+    "malicious repository": "dépôt malveillant"
+    "package manager": "gestionnaire de paquets"
+    "dependency": "dépendance"
+    "dependencies": "dépendances"
+    "open-source software": "logiciel libre ou open source"
+    "security testing": "tests de sécurité"
+    "input validation": "validation des entrées"
+    "output encoding": "encodage des sorties"
+    "sandbox escape": "évasion de bac à sable"
+    "container escape": "évasion de conteneur"
+
+    # --------------------------------------------------------
+    # Intelligence artificielle et cybersécurité
+    # --------------------------------------------------------
+    "artificial intelligence": "intelligence artificielle"
+    "machine learning": "apprentissage automatique"
+    "deep learning": "apprentissage profond"
+    "large language model": "grand modèle de langage"
+    "generative AI": "intelligence artificielle générative"
+    "AI agent": "agent d'intelligence artificielle"
+    "agentic AI": "IA agentique"
+    "prompt injection": "injection de prompt"
+    "indirect prompt injection": "injection indirecte de prompt"
+    "jailbreak": "contournement des garde-fous"
+    "model poisoning": "empoisonnement de modèle"
+    "data poisoning": "empoisonnement des données"
+    "training data": "données d'entraînement"
+    "model inversion": "inversion de modèle"
+    "model extraction": "extraction de modèle"
+    "membership inference": "inférence d'appartenance"
+    "adversarial example": "exemple adversarial"
+    "adversarial attack": "attaque adversariale"
+    "hallucination": "hallucination"
+    "retrieval-augmented generation": "génération augmentée par récupération"
+    "embedding": "représentation vectorielle"
+    "embeddings": "représentations vectorielles"
+    "vector database": "base de données vectorielle"
+    "semantic search": "recherche sémantique"
+    "semantic similarity": "similarité sémantique"
+    "fine-tuning": "ajustement fin"
+    "inference": "inférence"
+    "quantization": "quantification"
+    "guardrails": "garde-fous"
+    "model weights": "poids du modèle"
+    "context window": "fenêtre de contexte"
+    "tokenization": "tokenisation"
+
+    # --------------------------------------------------------
+    # Verbes et formulations journalistiques
+    # --------------------------------------------------------
+    "discovered": "découvert"
+    "identified": "identifié"
+    "detected": "détecté"
+    "observed": "observé"
+    "reported": "signalé"
+    "disclosed": "divulgué"
+    "revealed": "révélé"
+    "confirmed": "confirmé"
+    "investigated": "examiné"
+    "exploited": "exploité"
+    "targeted": "ciblé"
+    "compromised": "compromis"
+    "infected": "infecté"
+    "deployed": "déployé"
+    "distributed": "distribué"
+    "delivered": "diffusé"
+    "weaponized": "transformé en outil d'attaque"
+    "leveraged": "utilisé"
+    "bypassed": "contourné"
+    "patched": "corrigé"
+    "fixed": "corrigé"
+    "mitigated": "atténué"
+    "blocked": "bloqué"
+    "prevented": "empêché"
+    "disrupted": "perturbé"
+    "taken down": "démantelé"
+    "shut down": "mis hors service"
+    "arrested": "arrêté"
+    "charged": "inculpé"
+    "indicted": "mis en accusation"
+    "sentenced": "condamné"
+    "warned": "a averti"
+    "urged": "a exhorté"
+    "advised": "a recommandé"
+    "released": "a publié"
+    "issued": "a émis"
+    "announced": "a annoncé"
+    "updated": "a mis à jour"
+    "added": "a ajouté"
+    "removed": "a retiré"
+    "affected": "affecté"
+    "impacted": "touché"
+    "exposed": "exposé"
+    "vulnerable": "vulnérable"
+    "malicious": "malveillant"
+    "suspicious": "suspect"
+    "unauthorized": "non autorisé"
+    "legitimate": "légitime"
+    "widespread": "largement répandu"
+    "ongoing": "en cours"
+    "actively": "activement"
+    "recently": "récemment"
+    "previously": "précédemment"
+    "reportedly": "selon les informations rapportées"
+    "allegedly": "présumé"
+    "potentially": "potentiellement"
