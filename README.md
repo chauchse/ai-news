@@ -293,6 +293,48 @@ Paramètres actuels du briefing : fenêtre de 24 heures, score minimum 35, plafo
 
 Les fichiers de configuration du briefing sont montés depuis l’hôte. Ceux du collecteur et du scorer sont copiés à la construction : reconstruire `collector` après modification. Le contexte métier du prompt Qwen reste écrit dans `embeddings/briefing.py` ; modifier le YAML ne le remplace pas.
 
+## Installer le lancement quotidien comme service
+
+Après `./init-repo.sh`, configurer et vérifier SMTP, SFTP et la clé du serveur : `run-daily.sh` envoie le mail et publie le podcast à chaque exécution. Sur une machine Linux avec systemd, Docker et cron :
+
+```bash
+# Debian/Ubuntu, si cron est absent
+sudo apt install cron
+# Déployer le service et la tâche quotidienne
+sudo ./post-install.sh
+```
+
+Le script installe `/etc/systemd/system/ai-news.service` et `/etc/cron.d/ai-news`, recharge systemd et active le service cron. Il peut être relancé ; les fichiers remplacés sont sauvegardés à côté avec un suffixe `.bak.*`. Le chemin du dépôt est déduit de l’emplacement du script (par défaut `/opt/ai-news`). Relancer la post-installation si le dépôt est déplacé.
+
+Le service est de type `oneshot`, exécuté en root, sans limite de durée, avec les sorties dans le journal systemd. Il démarre `run-daily.sh` depuis la racine du dépôt. Le cron contient :
+
+```cron
+0 4 * * * root /usr/bin/systemctl start --no-block ai-news.service
+```
+
+L’installation ne lance pas le pipeline immédiatement. Cron le déclenche chaque jour à **04:00 selon le fuseau du serveur** : vérifier avec `timedatectl`. Pour utiliser l’heure française, configurer le serveur avec `sudo timedatectl set-timezone Europe/Paris`. Le `TZ=Europe/Paris` du pipeline règle ses dates, pas l’heure de déclenchement du cron.
+
+```bash
+# Déclencher une exécution manuelle (mail et publication inclus)
+sudo systemctl start --no-block ai-news.service
+# Consulter l’état et suivre les journaux
+sudo systemctl status ai-news.service
+sudo journalctl -u ai-news.service -f
+# Consulter les fichiers installés
+systemctl cat ai-news.service
+cat /etc/cron.d/ai-news
+```
+
+Après une exécution réussie, un service `oneshot` revient normalement à l’état `inactive (dead)`. Consulter le résultat avec `systemctl show ai-news.service -p Result -p ExecMainStatus`. Systemd ne démarre pas une deuxième instance tant que la première est active ; le verrou du pipeline protège aussi les lancements directs.
+
+Pour retirer la planification (sans interrompre une exécution en cours) :
+
+```bash
+sudo rm -f /etc/cron.d/ai-news
+sudo rm -f /etc/systemd/system/ai-news.service
+sudo systemctl daemon-reload
+```
+
 ## Diagnostic et automatisation
 
 ```bash
@@ -309,7 +351,7 @@ docker compose exec -T postgres sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT status, COUNT(*) FROM collection_runs GROUP BY status;"'
 ```
 
-`run-daily.sh` enchaîne infrastructure, collecte, diagnostic MiniLM, briefing, envoi du mail, audio et publication. **Il omet actuellement `app.scorer`** : ajouter l’étape de scoring après la collecte avant de l’utiliser comme pipeline complet. Son verrou `/run/ai-news.lock` exige les permissions adaptées. Aucune planification cron/systemd n’est livrée.
+`run-daily.sh` enchaîne infrastructure, collecte, diagnostic MiniLM, briefing, envoi du mail, audio et publication. **Il omet actuellement `app.scorer`** : ajouter l’étape de scoring après la collecte avant de l’utiliser comme pipeline complet. Son verrou `/run/ai-news.lock` exige les permissions adaptées. Le script `post-install.sh` installe la planification décrite ci-dessous.
 
 Autres limites à garder en tête : les articles sans date de publication sont exclus du briefing ; la vue SQL déduplique uniquement par GUID ; les évaluations Qwen sont répétées à chaque exécution. Les résumés et priorités produits par les modèles demandent une vérification des sources avant une décision opérationnelle.
 

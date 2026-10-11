@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Installe le lancement quotidien ; ne lance pas le pipeline immédiatement.
+set -Eeuo pipefail
+
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then
+  echo 'Usage : sudo ./post-install.sh'
+  echo 'Installe ai-news.service et /etc/cron.d/ai-news (tous les jours à 04:00, heure du serveur).'
+  exit 0
+fi
+if (($#)); then echo 'Usage : sudo ./post-install.sh' >&2; exit 2; fi
+if ((EUID != 0)); then echo 'Exécuter avec sudo : sudo ./post-install.sh' >&2; exit 1; fi
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+# Les chemins sont interpolés dans la syntaxe systemd.
+if [[ "$repo_dir" =~ [[:space:]\%\"\\] ]]; then
+  echo 'Installer le dépôt dans un chemin sans espaces, %, guillemets ni antislashs.' >&2
+  exit 1
+fi
+for cmd in systemctl docker flock install mktemp; do
+  command -v "$cmd" >/dev/null || { echo "Commande manquante : $cmd" >&2; exit 1; }
+done
+[[ -x /usr/bin/systemctl ]] || { echo '/usr/bin/systemctl introuvable.' >&2; exit 1; }
+[[ -f "$repo_dir/run-daily.sh" && -f "$repo_dir/.env" ]] || {
+  echo 'Lancer ./init-repo.sh et configurer .env avant la post-installation.' >&2; exit 1;
+}
+cd "$repo_dir"
+docker compose --profile ai --profile mail config --quiet
+systemctl cat docker.service >/dev/null
+cron_service=''
+for candidate in cron.service crond.service; do
+  if systemctl cat "$candidate" >/dev/null 2>&1; then
+    cron_service=$candidate
+    break
+  fi
+done
+[[ -n "$cron_service" ]] || {
+  echo 'Installer cron (Debian/Ubuntu : sudo apt install cron), puis relancer.' >&2; exit 1;
+}
+
+tmp_dir=$(mktemp -d)
+trap 'rm -rf -- "$tmp_dir"' EXIT
+cat > "$tmp_dir/ai-news.service" <<UNIT
+[Unit]
+Description=AI News - Pipeline quotidien
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=$repo_dir
+ExecStart=/bin/bash $repo_dir/run-daily.sh
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+TimeoutStartSec=0
+StandardOutput=journal
+StandardError=journal
+UNIT
+cat > "$tmp_dir/ai-news.cron" <<'CRON'
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+0 4 * * * root /usr/bin/systemctl start --no-block ai-news.service
+CRON
+if command -v systemd-analyze >/dev/null; then
+  systemd-analyze verify "$tmp_dir/ai-news.service"
+fi
+# Préserver les versions précédentes si le contenu change.
+for target in /etc/systemd/system/ai-news.service /etc/cron.d/ai-news; do
+  source_file="$tmp_dir/ai-news.service"
+  [[ "$target" != /etc/cron.d/ai-news ]] || source_file="$tmp_dir/ai-news.cron"
+  if [[ -e "$target" ]] && ! cmp -s "$source_file" "$target"; then
+    cp -p -- "$target" "$target.bak.$(date +%Y%m%d%H%M%S).$$"
+  fi
+  install -o root -g root -m 0644 "$source_file" "$target"
+done
+systemctl daemon-reload
+systemctl enable --now "$cron_service"
+echo 'Service et cron installés. Prochain lancement à 04:00 (heure du serveur).'
+echo 'Heure du serveur :'
+timedatectl show --property=Timezone --value
+echo 'Lancement manuel : sudo systemctl start --no-block ai-news.service'
+echo 'Journaux : sudo journalctl -u ai-news.service -f'

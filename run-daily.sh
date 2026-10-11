@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-cd /opt/ai-news
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
 #exec 9>/run/lock/ai-news.lock
 exec 9>/run/ai-news.lock
