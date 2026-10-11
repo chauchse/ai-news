@@ -14,7 +14,7 @@ import stat
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import paramiko
 import yaml
@@ -22,11 +22,13 @@ import yaml
 LOG = logging.getLogger('podcast')
 ITUNES = 'http://www.itunes.com/dtds/podcast-1.0.dtd'
 ATOM = 'http://www.w3.org/2005/Atom'
+CONTENT = 'http://purl.org/rss/1.0/modules/content/'
 ET.register_namespace('itunes', ITUNES)
 ET.register_namespace('atom', ATOM)
+ET.register_namespace('content', CONTENT)
 DATE_RE = re.compile(r'^(\d{4}-\d{2}-\d{2})(?:-[a-f0-9]{64})?-briefing\.mp3$')
 ARTICLE_RE = re.compile(r'^#{2,3}\s+(\d+)\.\s+(.+?)\s*$')
-SOURCE_RE = re.compile(r'^\s*(?:[-*]\s*)?(?:\*\*)?Sources?\s*(?:\*\*)?\s*:\s*(.*)$', re.I)
+SOURCE_RE = re.compile(r'^\s*(?:[-*]\s*)?(?:\*\*)?Sources?\s*(?:\*\*)?\s*:\s*(?:\*\*)?\s*(.*)$', re.I)
 MD_LINK_RE = re.compile(r'\[([^\]]+)\]\((https?://[^)\s]+)(?:\s+[^)]*)?\)')
 
 
@@ -34,7 +36,26 @@ def config_load(path):
     data = yaml.safe_load(Path(path).read_text(encoding='utf-8')) or {}
     if not isinstance(data, dict):
         raise ValueError('Podcast config must be a YAML mapping')
+    sftp = data.setdefault('sftp', {})
+    for key, variable in (('host', 'PODCAST_SFTP_HOST'), ('port', 'PODCAST_SFTP_PORT'),
+                          ('remote_path', 'PODCAST_SFTP_REMOTE_PATH')):
+        if os.environ.get(variable):
+            sftp[key] = os.environ[variable]
+    if os.environ.get('PODCAST_EMAIL'):
+        data.setdefault('podcast', {})['email'] = os.environ['PODCAST_EMAIL']
+    if os.environ.get('PODCAST_SITE_URL'):
+        data['site_url'] = os.environ['PODCAST_SITE_URL'].strip()
     return data
+
+
+def edition_url(base, language):
+    parsed = urlsplit(base)
+    if (parsed.scheme not in ('http', 'https') or not parsed.hostname
+            or parsed.query or parsed.fragment or parsed.username or parsed.password):
+        raise ValueError('PODCAST_SITE_URL must be an HTTP(S) base URL without credentials, query or fragment')
+    if language not in ('en', 'fr'):
+        raise ValueError('Unsupported podcast language')
+    return base.rstrip('/') + '/' + language + '/'
 
 
 def clean_markdown(value):
@@ -53,7 +74,7 @@ def parse_articles(markdown):
             current = {'title': clean_markdown(match.group(2)), 'sources': []}
             articles.append(current)
             continue
-        if re.match(r'^#{2,3}\s+', line) and re.search(r'annexe|non retenu|autres alertes', line, re.I):
+        if re.match(r'^#{2,3}\s+', line) and re.search(r'annexe|non retenu|autres alertes|other security alerts', line, re.I):
             break
         if current is None:
             continue
@@ -86,16 +107,16 @@ def parse_articles(markdown):
     return articles
 
 
-def episode_description(articles):
-    lines = ['Au sommaire de ce briefing :', '']
+def episode_description(articles, language="fr"):
+    lines = ['Au sommaire de ce briefing :' if language == 'fr' else 'In this briefing:', '']
     for i, article in enumerate(articles, 1):
         lines.append(f"{i}. {article['title']}")
         if article['sources']:
             for source in article['sources']:
                 label = source['name']
-                lines.append(f"   Source : {label}" + (f" — {source['url']}" if source.get('url') else ''))
+                lines.append(f"   {'Source :' if language == 'fr' else 'Source:'} {label}" + (f" — {source['url']}" if source.get('url') else ''))
         else:
-            lines.append('   Source : non précisée')
+            lines.append('   Source : non précisée' if language == 'fr' else '   Source: unspecified')
         lines.append('')
     return '\n'.join(lines).strip()
 
@@ -113,7 +134,7 @@ def get_audio_duration(path):
         return None
 
 
-def append_episode(state, episode_file, articles, now, retention):
+def append_episode(state, episode_file, articles, now, retention, language="fr"):
     """Keep distinct audio files, and make retries of the same file idempotent."""
     cutoff = now.date() - dt.timedelta(days=retention - 1)
     state = [ep for ep in state if dt.date.fromisoformat(ep['date']) >= cutoff]
@@ -124,11 +145,15 @@ def append_episode(state, episode_file, articles, now, retention):
     filename = f'{now.date().isoformat()}-{digest.hexdigest()}-briefing.mp3'
     existing = next((ep for ep in state if ep['filename'] == filename), None)
     if existing:
+        # Refresh metadata on retry without duplicating or redating the episode.
+        existing['description'] = episode_description(articles, language)
+        existing['language'] = language
         return state, existing
     episode = {
         'date': now.date().isoformat(),
         'filename': filename,
-        'description': episode_description(articles),
+        'description': episode_description(articles, language),
+        'language': language,
         'bytes': episode_file.stat().st_size,
         'duration': get_audio_duration(episode_file),
         'published_at': now.isoformat(),
@@ -167,9 +192,15 @@ def write_feed(config, episodes, destination):
 
     for ep in sorted(episodes, key=lambda e: e['published_at'], reverse=True):
         item = ET.SubElement(channel, 'item')
-        title = f"Briefing du {dt.date.fromisoformat(ep['date']).strftime('%d/%m/%Y')}"
+        language = ep.get('language', 'en' if channel_info.get('language', 'fr-FR').startswith('en') else 'fr')
+        date = dt.date.fromisoformat(ep['date'])
+        title = (f"[FR] Briefing du {date.strftime('%d/%m/%Y')}" if language == 'fr'
+                 else f"[EN] Daily briefing — {date.isoformat()}")
         elem(item, 'title', title)
-        elem(item, 'description', ep['description'])
+        # RSS clients render HTML; iTunes retains the plain-text version.
+        description_html = '<br/>\n'.join(html.escape(line) for line in ep['description'].splitlines())
+        elem(item, 'description', description_html)
+        elem(item, f'{{{CONTENT}}}encoded', description_html)
         elem(item, f'{{{ITUNES}}}summary', ep['description'])
         elem(item, f'{{{ITUNES}}}explicit', 'false')
         mp3_url = urljoin(base, 'episodes/' + ep['filename'])
@@ -221,20 +252,38 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default='/config/podcast.yaml')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--language', choices=['en', 'fr'])
+    parser.add_argument('--date', help='Edition date, YYYY-MM-DD')
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     cfg = config_load(args.config)
+    base_url = cfg.get('site_url', '')
+    if args.language:
+        edition = cfg.get('editions', {}).get(args.language)
+        if not edition:
+            raise ValueError('Podcast edition configuration required')
+        cfg = dict(cfg, **{k: v for k, v in edition.items() if k not in ('podcast', 'sftp')})
+        for key in ('podcast', 'sftp'):
+            cfg[key] = dict(cfg[key], **edition.get(key, {}))
+        cfg['site_url'] = edition_url(base_url, args.language)
+    elif not base_url:
+        raise ValueError('PODCAST_SITE_URL required')
     retention = int(cfg.get('retention_days', 7))
     if retention < 1:
         raise ValueError('retention_days must be >= 1')
     # Use Europe/Paris including daylight-saving transitions.
     from zoneinfo import ZoneInfo
     now = dt.datetime.now(ZoneInfo('Europe/Paris'))
+    if args.date:
+        edition_date = dt.date.fromisoformat(args.date)
+        now = dt.datetime.combine(edition_date, now.timetz())
     cutoff = now.date() - dt.timedelta(days=retention - 1)
     output_dir = Path(cfg.get('output_dir', '/output'))
+    if args.language:
+        output_dir = output_dir / 'daily' / now.date().isoformat() / args.language
     state_file = Path(cfg.get('state_file', '/state/episodes.json'))
     markdown_file = output_dir / cfg.get('briefing_file', 'briefing.md')
-    episode_file = output_dir / f'{now.date().isoformat()}-briefing.mp3'
+    episode_file = output_dir / f"{now.date().isoformat()}-{cfg.get('audio_file', 'briefing.mp3')}"
     if not episode_file.is_file():
         raise FileNotFoundError(f'MP3 absent : {episode_file}')
     if not markdown_file.is_file():
@@ -248,20 +297,34 @@ def main():
             raise ValueError('Invalid episode state')
     else:
         state = []
-    state, new_ep = append_episode(state, episode_file, articles, now, retention)
+    state, new_ep = append_episode(state, episode_file, articles, now, retention,
+                                   "en" if cfg["podcast"].get("language", "fr-FR").startswith("en") else "fr")
     cover = Path(cfg.get('cover_file', '/podcast/cover.jpg'))
     if not cover.is_file():
         raise FileNotFoundError(f'Illustration absente : {cover}')
     if not cfg['cover'].lower().endswith(('.jpg', '.jpeg', '.png')):
         raise ValueError('cover must be a JPG or PNG image filename')
-    remote_root = cfg['sftp']['remote_path'].rstrip('/')
+    remote_root = cfg['sftp'].get('remote_path', '').rstrip('/')
+    subdir = cfg['sftp'].get('remote_subdir', '')
+    if subdir:
+        if subdir in ('.', '..') or '/' in subdir or '\\' in subdir:
+            raise ValueError('remote_subdir must be a simple directory name')
+        remote_root = posixpath.join(remote_root, subdir) if remote_root else ''
     if remote_root in ('', '/'):
         raise ValueError('Refusing to publish into SFTP root')
-    host = os.environ.get('PODCAST_SFTP_HOST', cfg['sftp'].get('host', ''))
-    port = int(os.environ.get('PODCAST_SFTP_PORT', cfg['sftp'].get('port', 22)))
+    host = cfg['sftp'].get('host', '')
+    if not host or not cfg['podcast'].get('email'):
+        raise ValueError('PODCAST_SFTP_HOST and PODCAST_EMAIL required')
+    port = int(cfg['sftp'].get('port', 22))
+    if not 1 <= port <= 65535:
+        raise ValueError('Invalid SFTP port')
     username = os.environ.get('PODCAST_SFTP_USER')
     password = os.environ.get('PODCAST_SFTP_PASSWORD')
     key_file = os.environ.get('PODCAST_SFTP_KEY_FILE')
+    local_feed = output_dir / 'podcast.xml'
+    temporary_feed = local_feed.with_suffix('.xml.tmp')
+    write_feed(cfg, state, temporary_feed)
+    temporary_feed.replace(local_feed)
     if args.dry_run:
         LOG.info('DRY RUN: %s -> %s:%s', episode_file, host, remote_root)
         LOG.info('Articles: %d; retained episodes: %d; cutoff: %s', len(articles), len(state), cutoff)
@@ -273,7 +336,7 @@ def main():
     state_file.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as td:
         feed_file = Path(td) / 'podcast.xml'
-        write_feed(cfg, state, feed_file)
+        feed_file.write_bytes(local_feed.read_bytes())
         ssh = paramiko.SSHClient()
         ssh.load_system_host_keys()
         ssh.set_missing_host_key_policy(paramiko.RejectPolicy())

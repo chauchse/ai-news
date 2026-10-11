@@ -1,27 +1,22 @@
 briefing:
-  language: fr
+  language: fr  # mode historique, utilisé si languages est absent
+  languages: [en, fr]
   max_events: 15
   min_relevance_score: 35
   lookback_hours: 24
+  history:
+    days: 7
+    similarity_threshold: 0.72
 
   business_triage:
     max_candidates: 50
     max_dedup_reviews: 8
 
-    strategic_topic_targets:
-      ai: 4
-      regulation: 1
-      risk: 1
-      transformation: 3
-      other: 1
-
     max_security_alerts: 4
     max_strategic_events: 10
     max_p1_overflow: 2
 
-    min_business_relevance: 2
     min_strategic_importance: 2
-    min_security_business_relevance: 2
 
     max_security_watch_appendix: 6
 

@@ -12,6 +12,28 @@ class MailerTests(unittest.TestCase):
         self.cfg = {'sender': 'AI News <news@example.com>', 'recipient': 'reader@example.com',
                     'smtp': {'host': 'smtp.example.com', 'port': 587, 'security': 'starttls'}}
 
+    @patch.dict(os.environ, {'SENDER': 'News <env@example.com>', 'RECIPIENT': 'reader@example.org'})
+    def test_addresses_from_environment_without_yaml_addresses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / 'mail.yaml'
+            config.write_text('smtp:\n  host: smtp.example.com\n  security: starttls\n')
+            cfg = load_config(config)
+            text = root / 'briefing.md'
+            text.write_text('# Briefing')
+            cfg['input'] = str(text)
+            message = build_message(cfg)
+            self.assertEqual(str(message['From']), 'News <env@example.com>')
+            self.assertEqual(str(message['To']), 'reader@example.org')
+
+    @patch.dict(os.environ, {'SENDER': 'bad\nBcc: x@example.com', 'RECIPIENT': 'reader@example.org'})
+    def test_environment_header_injection_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'mail.yaml'
+            config.write_text('smtp:\n  host: smtp.example.com\n  security: starttls\n')
+            with self.assertRaises(ValueError):
+                load_config(config)
+
     def test_html_keeps_sources_and_removes_unsafe_attributes(self):
         output = render_html('# Briefing\n\n**Résumé** [Source](https://example.com)\n\n'
                              '<img src="x" onerror="alert(1)"><a href="javascript:alert(1)">bad</a>')

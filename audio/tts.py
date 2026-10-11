@@ -29,7 +29,7 @@ def extract(text):
             flush()
             title, summary = None, []
             heading = re.sub(r'^#{2,3}\s+', '', line)
-            if re.search(r'annexe|non retenu|autres alertes', heading, re.I):
+            if re.search(r'annexe|non retenu|autres alertes|other security alerts', heading, re.I):
                 break
             section = heading
             continue
@@ -56,8 +56,15 @@ def silence(path, ms, rate):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default='/config/audio.yml')
+    parser.add_argument('--language', choices=['en', 'fr'])
+    parser.add_argument('--input')
+    parser.add_argument('--output')
+    parser.add_argument('--date', help='Date de l’édition, AAAA-MM-JJ')
     args = parser.parse_args()
     config = yaml.safe_load(Path(args.config).read_text(encoding='utf-8')) or {}
+    for key in ('language', 'input', 'output'):
+        if getattr(args, key):
+            config[key] = getattr(args, key)
     engine = config.get('engine', 'piper')
     language = config.get('language', 'fr')
     if engine not in ('piper', 'kokoro', 'xtts'):
@@ -74,7 +81,8 @@ def main():
     if not items:
         parser.error('No articles found in Markdown')
     configured_output = Path(config.get('output', '/output/briefing.mp3'))
-    dated = datetime.now(ZoneInfo('Europe/Paris')).strftime('%Y-%m-%d')
+    dated = args.date or datetime.now(ZoneInfo('Europe/Paris')).strftime('%Y-%m-%d')
+    datetime.strptime(dated, '%Y-%m-%d')
     output = configured_output.with_name(f'{dated}-{configured_output.name}')
     output.parent.mkdir(parents=True, exist_ok=True)
 

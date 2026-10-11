@@ -15,7 +15,7 @@ if [[ "$repo_dir" =~ [[:space:]\%\"\\] ]]; then
   echo 'Installer le dépôt dans un chemin sans espaces, %, guillemets ni antislashs.' >&2
   exit 1
 fi
-for cmd in systemctl docker flock install mktemp; do
+for cmd in systemctl docker flock install mktemp tee logrotate; do
   command -v "$cmd" >/dev/null || { echo "Commande manquante : $cmd" >&2; exit 1; }
 done
 [[ -x /usr/bin/systemctl ]] || { echo '/usr/bin/systemctl introuvable.' >&2; exit 1; }
@@ -54,6 +54,25 @@ TimeoutStartSec=0
 StandardOutput=journal
 StandardError=journal
 UNIT
+cat > "$tmp_dir/ai-news.logrotate" <<'ROTATE'
+/var/log/ai-news.log {
+    daily
+    rotate 7
+    maxage 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su root root
+}
+ROTATE
+logrotate --debug "$tmp_dir/ai-news.logrotate"
+if [[ ! -e /var/log/ai-news.log ]]; then
+    install -o root -g root -m 0640 /dev/null /var/log/ai-news.log
+fi
+chown root:root /var/log/ai-news.log
+chmod 0640 /var/log/ai-news.log
 cat > "$tmp_dir/ai-news.cron" <<'CRON'
 SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -63,9 +82,10 @@ if command -v systemd-analyze >/dev/null; then
   systemd-analyze verify "$tmp_dir/ai-news.service"
 fi
 # Préserver les versions précédentes si le contenu change.
-for target in /etc/systemd/system/ai-news.service /etc/cron.d/ai-news; do
+for target in /etc/systemd/system/ai-news.service /etc/cron.d/ai-news /etc/logrotate.d/ai-news; do
   source_file="$tmp_dir/ai-news.service"
   [[ "$target" != /etc/cron.d/ai-news ]] || source_file="$tmp_dir/ai-news.cron"
+  [[ "$target" != /etc/logrotate.d/ai-news ]] || source_file="$tmp_dir/ai-news.logrotate"
   if [[ -e "$target" ]] && ! cmp -s "$source_file" "$target"; then
     cp -p -- "$target" "$target.bak.$(date +%Y%m%d%H%M%S).$$"
   fi
@@ -73,8 +93,14 @@ for target in /etc/systemd/system/ai-news.service /etc/cron.d/ai-news; do
 done
 systemctl daemon-reload
 systemctl enable --now "$cron_service"
+# Selon la distribution, logrotate est lancé par ce timer ou par cron.daily.
+if systemctl cat logrotate.timer >/dev/null 2>&1; then
+    systemctl enable --now logrotate.timer
+elif [[ ! -x /etc/cron.daily/logrotate ]]; then
+    echo 'Attention : activer une exécution quotidienne de logrotate sur cette distribution.' >&2
+fi
 echo 'Service et cron installés. Prochain lancement à 04:00 (heure du serveur).'
 echo 'Heure du serveur :'
 timedatectl show --property=Timezone --value
 echo 'Lancement manuel : sudo systemctl start --no-block ai-news.service'
-echo 'Journaux : sudo journalctl -u ai-news.service -f'
+echo 'Journaux : sudo tail -f /var/log/ai-news.log (également dans journalctl)'
