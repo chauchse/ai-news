@@ -67,7 +67,7 @@ DOMAIN_MAP = {
     "cybersecurity": "security", "artificial_intelligence": "artificial_intelligence",
     "risk_management": "regulation_and_risk", "regulation": "regulation_and_risk",
     "digital_transformation": "gaming_and_transformation",
-    "gaming_industry": "gaming_and_transformation", "infrastructure": "security",
+    "gaming_industry": "gaming_and_transformation", "infrastructure": "gaming_and_transformation",
     "gaming": "gaming_and_transformation", "risk": "regulation_and_risk",
     "ai": "artificial_intelligence"
 }
@@ -318,7 +318,11 @@ def deduplicate_security_events(groups, cfg):
                         return False
                     if av and bv and av.isdisjoint(bv):
                         return False
-                    return bool(ap & bp)
+                    if ap & bp:
+                        return True
+                    # Unrecognized products: only send very close title matches to Qwen.
+                    ta, tb = distinctive_tokens(a["title"]), distinctive_tokens(b["title"])
+                    return len(ta & tb) >= 4 and len(ta & tb) / max(1, len(ta | tb)) >= 0.65
                 if not all(compatible(a, b) for a, b in pairs):
                     continue
                 reviews += 1
@@ -349,7 +353,7 @@ def deduplicate_security_events(groups, cfg):
                     break
         if not joined:
             result.append(group)
-    print(f"Déduplication V55 : {reviews} arbitrages, {merges} fusions, {len(result)} événements", flush=True)
+    print(f"Déduplication V56 : {reviews} arbitrages, {merges} fusions, {len(result)} événements", flush=True)
     return result
 
 
@@ -400,7 +404,7 @@ def candidate_pool(groups, cfg):
     security = [i for i,g in enumerate(groups) if group_category(g) == "security"]
     buckets = {t:[i for i in strategic if strategic_topic(groups[i]) == t]
                for t in ("regulation","risk","transformation","ai","other")}
-    target = max(8,cap//2)
+    target = min(cap, max(8, cap * 2 // 3))
     strategic_selected = 0
     while strategic_selected < target:
         progress = False
@@ -444,17 +448,19 @@ def business_assessments(groups, cfg):
         is_security = any(x["vulnerability"]["candidate"] for x in group)
         app_status, products = applicability(group, cfg)
         system = (
-            "You assess RSS news for a CTO/CISO of a PHYSICAL casino in Luxembourg, "
-            "not an online gambling or video-game company. Score relevance to business operations, "
-            "not vendor name recognition. Priorities: infrastructure security, business continuity, "
-            "fraud detection, operational risk, Luxembourg/EU compliance, practical AI adoption, "
-            "process automation, data analytics and digital transformation. "
-            "Do not claim the casino uses any named product, or that any regulation applies, "
-            "unless explicitly established in the input. Do not infer an asset inventory. "
-            "Rate business_relevance and news_importance as integers 0..5. "
+            "You are the editor of a general AI, IT, cybersecurity and technology news "
+            "briefing for an experienced technology professional. Prioritize significant "
+            "new AI models, agents, infrastructure, cloud, software, automation, data, "
+            "cybersecurity, regulation and operational risk. The reader also works with "
+            "a physical casino in Luxembourg, but direct casino relevance is OPTIONAL. "
+            "Rate technology_relevance (0..5) for usefulness to a technology professional; "
+            "news_importance (0..5) for actual newsworthiness, specificity and impact; "
+            "business_relevance (0..5) for direct casino operational relevance. "
+            "Do not reward generic vendor announcements, repetitive advisories, or claims "
+            "not supported by the article. Do not assume deployment or exploitation. "
             "Assign one category: security, artificial_intelligence, regulation_and_risk, "
-            "gaming_and_transformation. Return ONLY JSON object keys "
-            "business_relevance, news_importance, category, reason. "
+            "gaming_and_transformation. Return ONLY JSON keys technology_relevance, "
+            "business_relevance, news_importance, category, reason. All scores integers 0..5. "
             "The reason must be factual and no more than 20 words."
         )
         user = (f"Title: {a['title']}\nSummary: {a['summary'][:900]}\n"
@@ -469,75 +475,106 @@ def business_assessments(groups, cfg):
                 [{"role": "system", "content": system}, {"role": "user", "content": user}],
                 cfg["llm"]["model"], cfg["llm"].get("temperature", 0), predict=160)
             relevance = int(result["business_relevance"])
+            technology = int(result["technology_relevance"])
             importance = int(result["news_importance"])
             category = str(result["category"])
-            if not (0 <= relevance <= 5 and 0 <= importance <= 5 and
+            if not (0 <= relevance <= 5 and 0 <= technology <= 5 and 0 <= importance <= 5 and
                     category in ("security", "artificial_intelligence",
                                  "regulation_and_risk", "gaming_and_transformation")):
                 raise ValueError("Qwen score/category out of range")
             reason = str(result.get("reason", ""))[:120]
         except Exception as exc:
             print(f"ATTENTION évaluation {index} impossible : {exc}", file=sys.stderr)
-            relevance, importance, category, reason = 0, 0, group_category(group), "evaluation unavailable"
+            relevance, technology, importance, category, reason = 0, 0, 0, group_category(group), "evaluation unavailable"
         # Deterministic security classification overrides Qwen.
         if is_security:
             category = "security"
         p1 = any(x["vulnerability"]["priority"] == "P1_review" for x in group)
         if is_security:
             levels = {x["vulnerability"]["priority"] for x in group}
-            importance = max(importance, 5 if "P1_review" in levels else
-                             4 if "P2_review" in levels else 2)
+            # Only elevate genuinely high-priority preliminary alerts.
+            if "P1_review" in levels:
+                importance = max(importance, 5)
+            elif "P2_review" in levels:
+                importance = max(importance, 4)
         assessed.append({"group": group, "category": category, "business": relevance,
-                         "importance": importance, "priority": p1,
-                         "ranking": relevance * 12 + importance * 8,
+                         "technology": technology, "importance": importance, "priority": p1,
+                         "ranking": technology * 12 + importance * 10 + relevance * 2,
                          "watch_priority": watch_priority(group),
                          "reason": reason, "applicability": app_status, "products": products,
                          "topic": strategic_topic(group) if not is_security else "security"})
         print(f"  {index:02d}/{len(pool)} [{category}] métier={relevance}/5 "
-              f"importance={importance}/5 watch={watch_priority(group)} applicabilité={app_status} {a['title'][:75]}", flush=True)
+              f"tech={technology}/5 importance={importance}/5 watch={watch_priority(group)} "
+              f"applicabilité={app_status} {a['title'][:75]}", flush=True)
     return assessed
 
 
 def select_groups(groups, cfg):
-    """Separate security alerts from strategic news; do not fill strategic slots with CVEs."""
-    settings = cfg["briefing"].get("business_triage", {})
+    """Select relevant events with soft category targets and an overall hard cap."""
+    briefing = cfg["briefing"]
+    settings = briefing.get("business_triage", {})
+    selection = briefing.get("selection", {})
     assessed = business_assessments(groups, cfg)
-    minimum = int(settings.get("min_business_relevance", 2))
-    max_security = int(settings.get("max_security_alerts", 4))
-    max_strategic = int(settings.get("max_strategic_events", 6))
-    max_p1_extra = int(settings.get("max_p1_overflow", 2))
-    ranked = sorted(assessed, key=lambda x: (x["ranking"], x["watch_priority"], x["importance"]), reverse=True)
-    security = [x for x in ranked if x["category"] == "security"]
-    strategic = [x for x in ranked if x["category"] != "security" and x["business"] >= minimum]
-    p1 = [x for x in security if x["priority"]]
-    p1.sort(key=lambda x: (x["ranking"], x["watch_priority"]), reverse=True)
-    selected_security = p1[:max_security + max_p1_extra]
-    for item in security:
-        if len(selected_security) >= max(max_security, len(selected_security)):
-            break
-        if item not in selected_security and item["business"] >= minimum:
-            selected_security.append(item)
-    selected_strategic = []
-    targets = settings.get("strategic_topic_targets", {"ai":2,"regulation":1,"risk":1,"transformation":1,"other":1})
-    for topic in ("regulation","risk","transformation","ai","other"):
-        target = max(0, int(targets.get(topic,0)))
-        for item in strategic:
-            if len(selected_strategic) >= max_strategic: break
-            if sum(x["topic"] == topic for x in selected_strategic) >= target: break
-            if item["topic"] != topic or item in selected_strategic: continue
-            if any(near_duplicate_topic(item,x) for x in selected_strategic): continue
-            selected_strategic.append(item)
-    # No forced fill: unrepresented categories stay empty.
-    selected = selected_security + selected_strategic
+    cap = max(1, int(briefing.get("max_events", 15)))
+    min_importance = int(settings.get("min_strategic_importance", 2))
+    max_security = max(0, int(settings.get("max_security_alerts", 4)))
+    max_strategic = max(0, int(settings.get("max_strategic_events", cap)))
+    max_p1_extra = max(0, int(settings.get("max_p1_overflow", 2)))
+    # Business relevance is a ranking bonus, never a mandatory filter for AI/IT.
+    eligible = [x for x in assessed if x["technology"] >= 2 and x["importance"] >= min_importance]
+    eligible.sort(key=lambda x: (x["ranking"], x["watch_priority"]), reverse=True)
+    critical = [x for x in assessed if x["category"] == "security" and x["priority"]]
+    critical.sort(key=lambda x: x["ranking"], reverse=True)
+    targets = {k: max(0, int(selection.get(k, {}).get("target", 0))) for k in
+               ("security", "artificial_intelligence", "regulation_and_risk", "gaming_and_transformation")}
+    flexible = bool(selection.get("flexible_quotas", True))
+    selected = []
+    counts = Counter()
+    def add(item, override=False):
+        if item in selected or len(selected) >= cap:
+            return False
+        category = item["category"]
+        if not override:
+            if category == "security" and counts["security"] >= max_security:
+                return False
+            if category != "security" and sum(v for k, v in counts.items() if k != "security") >= max_strategic:
+                return False
+        if any(near_duplicate_topic(item, old) for old in selected if old["category"] == category):
+            return False
+        selected.append(item)
+        counts[category] += 1
+        return True
+    if selection.get("critical_security_override", True):
+        for item in critical[:max_security + max_p1_extra]:
+            add(item, override=True)
+    # Soft quotas in descending newsworthiness, with IA/IT preferred on ties.
+    for category in ("artificial_intelligence", "gaming_and_transformation", "regulation_and_risk", "security"):
+        for item in eligible:
+            if counts[category] >= targets[category]:
+                break
+            if item["category"] == category:
+                add(item)
+    if flexible:
+        for item in eligible:
+            add(item)
+    security_watch = [x for x in assessed if x["category"] == "security" and x not in selected
+                      and any(a["vulnerability"]["priority"] in ("P1_review", "P2_review")
+                              for a in x["group"])][:max(0, int(settings.get("max_security_watch_appendix", 8)))]
+    print(f"Diagnostic sélection : évalués={len(assessed)}, éligibles={len(eligible)}, "
+          f"rejetés (pertinence/importance)={len(assessed) - len(eligible)}, sélectionnés={len(selected)}", flush=True)
     print("Répartition :", dict(Counter(x["category"] for x in selected)), flush=True)
-    print(f"Rubriques : sécurité={len(selected_security)} ; stratégique={len(selected_strategic)}")
-    print("Sélection :")
+    for item in assessed:
+        if item not in selected:
+            a = max(item["group"], key=lambda x: x["score"])
+            print(f"  NON RETENU [{item['category']}] tech={item['technology']}/5 "
+                  f"importance={item['importance']}/5 métier={item['business']}/5 "
+                  f"{a['title'][:85]}", flush=True)
     for item in selected:
         a = max(item["group"], key=lambda x: x["score"])
-        print(f"  [{item['category']}] métier={item['business']}/5 "
-              f"importance={item['importance']}/5 thème={item['topic']} applicabilité={item['applicability']} "
-              f"P1={item['priority']} {a['title'][:85]} — {item['reason']}", flush=True)
-    return selected
+        print(f"  RETENU [{item['category']}] tech={item['technology']}/5 "
+              f"importance={item['importance']}/5 métier={item['business']}/5 "
+              f"{a['title'][:85]}", flush=True)
+    return selected, security_watch
 
 
 def ollama_object(messages, model, temperature, predict=320):
@@ -686,7 +723,7 @@ class Translator:
 
 
 
-def format_markdown(events, cfg, analyzed_count, total_events):
+def format_markdown(events, cfg, analyzed_count, total_events, security_watch=None):
 
     lang = cfg["briefing"]["language"]
 
@@ -734,6 +771,22 @@ def format_markdown(events, cfg, analyzed_count, total_events):
 
         lines.append("")
 
+    # Links only: no Qwen-generated claims and no applicability inference.
+    if security_watch:
+        lines += ["## Autres alertes de sécurité à examiner" if lang == "fr" else
+                  "## Other security alerts to review", "",
+                  "Alertes P1/P2 hors quota principal ; classement provisoire, applicabilité inconnue." if lang == "fr" else
+                  "P1/P2 candidates outside main quota; provisional triage, unknown applicability.", ""]
+        for item in security_watch:
+            a = max(item["group"], key=lambda x: x["score"])
+            priority = a["vulnerability"]["priority"]
+            title = a["title"].replace("[", r"\[").replace("]", r"\]")
+            url = a.get("url")
+            if url and url.startswith(("https://", "http://")):
+                lines.append(f"- **{priority}** — [{title}]({url})")
+            else:
+                lines.append(f"- **{priority}** — {title} (article ID {a['id']})")
+        lines.append("")
     return "\n".join(lines) + "\n"
 
 
@@ -759,7 +812,7 @@ def main():
     groups = rank_groups(group_articles(articles))
     groups = rank_groups(deduplicate_security_events(groups, cfg))
 
-    selected = select_groups(groups, cfg)
+    selected, security_watch = select_groups(groups, cfg)
 
     print(f"Événements distincts : {len(groups)} ; sélectionnés : {len(selected)}", flush=True)
     if os.getenv("BRIEFING_DRY_RUN", "0") == "1":
@@ -819,7 +872,7 @@ def main():
 
         raise RuntimeError("Aucun événement généré avec succès")
 
-    markdown = format_markdown(completed, cfg, len(articles), len(groups))
+    markdown = format_markdown(completed, cfg, len(articles), len(groups), security_watch)
 
     output = Path(os.getenv("BRIEFING_OUTPUT", "/tmp/ai-news-briefing.md"))
 

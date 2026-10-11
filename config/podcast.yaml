@@ -1,0 +1,21 @@
+# AI News V56 — Podcast (public metadata only)
+site_url: https://podcast.chauchard.info/
+cover: cover.jpg
+cover_file: /podcast/cover.jpg
+output_dir: /output
+briefing_file: briefing.md
+state_file: /state/episodes.json
+retention_days: 7
+
+podcast:
+  title: "AI News — Veille IA et cybersécurité"
+  description: "Briefing quotidien de veille sur l'intelligence artificielle et la cybersécurité fait par IA."
+  language: fr-FR
+  author: "AI News"
+  email: "sebastien@chauchard.info"  # Apple Podcasts requires a real owner email
+  category: Technology
+
+sftp:
+  host: ftp.cluster030.hosting.ovh.net
+  port: 22
+  remote_path: /home/chaucha/podcast  # Verify path as seen by SFTP pwd

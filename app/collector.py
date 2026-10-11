@@ -51,12 +51,64 @@ def article_content(entry):
     return entry.get("summary", "")
 
 
+def purge_disabled_sources(conn, config):
+    """Purge les articles des sources explicitement désactivées."""
+
+    disabled = [
+        source for source in config.get("sources", [])
+        if source.get("enabled", True) is False
+    ]
+
+    if not disabled:
+        return
+
+    with conn.cursor() as cur:
+        for source in disabled:
+            name = source["name"]
+            url = source["url"]
+
+            cur.execute(
+                "SELECT id FROM sources WHERE feed_url = %s",
+                (url,)
+            )
+            row = cur.fetchone()
+
+            if row is None:
+                log.info(
+                    "Source désactivée absente de la base : %s",
+                    name
+                )
+                continue
+
+            source_id = row[0]
+
+            cur.execute(
+                "SELECT COUNT(*) FROM articles WHERE source_id = %s",
+                (source_id,)
+            )
+            count = cur.fetchone()[0]
+
+            cur.execute(
+                "DELETE FROM articles WHERE source_id = %s",
+                (source_id,)
+            )
+
+            log.info(
+                "PURGE : %s - %d articles supprimés",
+                name,
+                count
+            )
+
+    conn.commit()
+
 def main():
     with open(CONFIG_PATH, encoding="utf-8") as f:
         config = yaml.safe_load(f) or {}
 
     with psycopg.connect(DATABASE_URL) as conn:
+        purge_disabled_sources(conn, config)
         for source in config.get("sources", []):
+
             if not source.get("enabled", True):
                 continue
 

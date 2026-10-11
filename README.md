@@ -1,685 +1,287 @@
-# AI News — README technique V52
+# AI News
 
-> Documentation basée sur les fichiers V52, le catalogue `sources.yaml`, ainsi que le `docker-compose.yml` et le code du collecteur communiqués le 10 octobre 2026. Les Dockerfiles, le schéma SQL complet, `app.normalizer`, `embeddings/worker.py` et `embeddings/glossary.py` ne sont pas fournis. **Le DRY RUN V52 a été exécuté avec succès ; la génération complète V52 reste à valider.**
+Veille RSS/Atom sur l’IA, l’IT, la cybersécurité et les risques, avec un contexte métier de casino physique au Luxembourg. Le projet produit un briefing français, un MP3 et, en option, un podcast publié par SFTP.
 
-## 1. Objectif et périmètre
-
-Veille locale RSS/Atom pour un CTO/CISO d'un **casino physique au Luxembourg** : cybersécurité, vulnérabilités exploitées, continuité, risques, fraude, conformité UE/LU, IA appliquée, automatisation et transformation numérique. Les jeux vidéo et casinos en ligne ne sont pas des priorités.
-
-## 2. Architecture fonctionnelle
+## Flux de traitement
 
 ```text
-sources.yaml (catalogue de flux RSS/Atom)
-    ↓
-Collecteur RSS/Atom (feedparser, urllib) + normalisation (app.normalizer)
-    ↓
-PostgreSQL → vue unique_articles (score historique)
-    ↓
-briefing.py : filtres + watchlists + détection CVE/CVSS
-    ↓
-MiniLM multilingue : classification et regroupement d'événements
-    ↓
-Présélection diversifiée et conservation des signaux P1
-    ↓
-Ollama / Qwen2.5:3b : évaluation métier et importance (JSON)
-    ↓
-Sélection avec quotas souples
-    ↓
-Ollama / Qwen2.5:3b : titre et résumé anglais (JSON)
-    ↓
-MarianMT + glossaire : traduction anglais → français
-    ↓
-Markdown : BRIEFING_OUTPUT
+config/sources.yaml
+  → Collecte RSS/Atom et normalisation HTML
+  → PostgreSQL : articles et historique de collecte
+  → Scoring par mots-clés, fraîcheur, longueur et bonus métier
+  → Vue unique_articles : une ligne par GUID
+  → Briefing : filtres, watchlists, détection CVE/CVSS
+  → MiniLM : classification et regroupement des événements
+  → Qwen via Ollama : déduplication complémentaire, évaluation et sélection
+  → Qwen : titres et résumés anglais
+  → MarianMT + glossaire : traduction française
+  → output/briefing.md
+  → Mail HTML + texte via SMTP (optionnel)
+  → Kokoro : output/AAAA-MM-JJ-briefing.mp3
+  → SFTP : MP3, illustration et podcast.xml
 ```
 
-Le module de briefing lit PostgreSQL mais n'y écrit **aucun** score, résultat ou résumé. Il ne collecte pas directement les flux RSS. Le code de collecte a été fourni ; aucun ordonnanceur n’est défini dans le Compose communiqué ni dans la fonction `main()` du collecteur.
+La collecte et le scoring écrivent en base. Le briefing lit la base et écrit le Markdown ; ses évaluations Qwen ne sont pas conservées en base. Les modèles fonctionnent localement après téléchargement initial. Les priorités P1/P2 sont des signaux textuels provisoires, à vérifier dans les sources.
 
-## 3. Modèles et bibliothèques
+Le regroupement du briefing est autonome. `embeddings.worker` est un outil de diagnostic qui affiche des similarités ; il ne calcule aucun score et ne stocke aucun groupe.
 
-| Modèle | Référence | Fonction | Configuration effective |
-|---|---|---|---|
-| MiniLM multilingue | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` utilisé lors des tests ; en V52 la valeur réelle vient de `embeddings.worker.MODEL_NAME` | Encodage, classification, déduplication | CPU, embeddings normalisés, `batch_size=16`, seuil `worker.THRESHOLD` |
-| Qwen | `qwen2.5:3b` | Note métier, importance, catégorie et synthèse | Ollama `/api/chat`, JSON, `temperature=0`, `num_ctx=3072`, `num_predict=160` (tri) ou `320` (synthèse) |
-| MarianMT | `Helsinki-NLP/opus-mt-en-fr` | Traduction anglais→français | PyTorch CPU, 4 threads, `num_beams=4`, `max_new_tokens=180` |
+## Installation
 
-Bibliothèques visibles : `psycopg`, `PyYAML`, `sentence-transformers`, `torch`, `transformers`, bibliothèque standard `urllib.request`. Le glossaire repose sur `CyberGlossary` (`embeddings.glossary`) ; son contenu n'a pas été fourni. Les modèles tournent localement après installation/téléchargement initial. Environnement cible de développement : VM Linux, 4 vCPU, 8 Go RAM, sans GPU. Qwen est conservé en mémoire `5m` pour le triage et libéré (`keep_alive=0`) à la fin des appels de synthèse avant MarianMT.
+Toutes les commandes partent de la racine du dépôt. Docker et Docker Compose avec profils sont nécessaires ; ajouter `sudo` devant `docker` si votre compte l’exige.
 
-## 4. Fichiers
-
-```text
-/opt/ai-news/
-├── config/
-│   ├── briefing.yaml             # paramètres de génération et sélection
-│   ├── semantic_scoring.yaml     # profils descriptifs MiniLM
-│   ├── watchlists.yaml           # listes d'inclusion/exclusion
-│   ├── glossary.yaml             # protection terminologique (non fourni)
-│   └── sources.yaml              # catalogue RSS (chemin réel à confirmer)
-└── embeddings/
-    ├── briefing.py              # orchestration V52
-    ├── watchlist.py             # moteur des règles
-    ├── vulnerability_detector.py # CVE/CVSS/exploitation
-    ├── worker.py                # MODEL_NAME, THRESHOLD, extract_cves (non fourni)
-    └── glossary.py              # CyberGlossary (non fourni)
-```
-
-Les chemins `/config/` sont vus depuis le conteneur `embeddings` : le Compose monte `./config:/config:ro`. Le collecteur utilise `/app/config/sources.yaml` ; vérifier que le Dockerfile du collecteur copie bien ce fichier, car il ne dispose d’aucun montage `./config` dans le Compose.
-
-## 4 bis. Infrastructure Docker Compose (configuration fournie)
-
-Le déploiement utilise **Docker Compose**, un réseau Docker Compose implicite (aucun `networks:` personnalisé), trois volumes nommés et quatre services. Les services ne sont pas tous démarrés par défaut : `embeddings` et `ollama` sont associés au profil `ai`.
-
-| Service | Image / build | Rôle | Persistance | Contraintes et démarrage |
-|---|---|---|---|---|
-| `postgres` (`ai-news-postgres`) | `postgres:17` | Stockage des sources, articles et historiques de collecte | `postgres_data:/var/lib/postgresql/data` | `restart: unless-stopped` ; contrôle `pg_isready` toutes les 10 s, délai 5 s, 5 tentatives ; port hôte `${POSTGRES_PORT}:5432` |
-| `collector` | Build depuis `.` (Dockerfile racine par défaut) | Collecte RSS et normalisation | Base PostgreSQL uniquement | Attend PostgreSQL sain ; aucun `restart` ni planification déclarés |
-| `embeddings` | Build depuis `embeddings/Dockerfile` | MiniLM, évaluation métier, synthèse, traduction | `embeddings_models:/models`, montage `./config:/config:ro` | Profil `ai`, `mem_limit: 6g`, attend PostgreSQL sain |
-| `ollama` (`ai-news-ollama`) | `ollama/ollama:latest` | Serveur local Qwen | `ollama_models:/root/.ollama` | Profil `ai`, `mem_limit: 4g`, `restart: unless-stopped` |
-
-**Attention à la RAM :** les limites de 6 Go (`embeddings`) et 4 Go (`ollama`) représentent des plafonds *par conteneur*, et non une réservation ni une limite globale de 8 Go. Sur la VM de 8 Go, l'exécution simultanée peut provoquer une pression mémoire ou un OOM, en particulier lors de l'évaluation Qwen. La séquence V52 charge MiniLM, puis appelle Qwen et charge MarianMT après les synthèses. Surveiller `docker stats` et les logs du noyau.
-
-### Variables réellement définies dans Compose
-
-| Service | Variable | Valeur fournie / effet |
-|---|---|---|
-| `postgres` | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Valeurs depuis `.env` ; initialisation PostgreSQL |
-| `postgres` | `POSTGRES_PORT` | Port publié sur l'hôte ; nécessaire uniquement si accès externe à Docker |
-| `collector` | `DATABASE_URL` | `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}` |
-| `collector` | `SOURCES_FILE` | `/app/config/sources.yaml` |
-| `embeddings` | `DATABASE_URL` | Même DSN interne PostgreSQL |
-| `embeddings` | `HF_HOME` | `/models` (cache Hugging Face persistant) |
-| `embeddings` | `OMP_NUM_THREADS` | `4` |
-| `embeddings` | `BRIEFING_CONFIG` | `/config/briefing.yaml` |
-| `ollama` | `OLLAMA_NUM_THREADS` | `4` ; effet exact dépend de la version Ollama, à vérifier |
-| `ollama` | `OLLAMA_NUM_PARALLEL` | `1` |
-| `ollama` | `OLLAMA_MAX_LOADED_MODELS` | `1` |
-| `ollama` | `OLLAMA_KEEP_ALIVE` | `0` (mais V52 transmet `keep_alive` par requête) |
-| `ollama` | `DATABASE_URL`, `HF_HOME`, `OMP_NUM_THREADS`, `OLLAMA_URL`, `OLLAMA_MODEL` | Variables présentes dans le service, mais **aucune utilisation n'est démontrée** par l'image standard `ollama/ollama` ; `OLLAMA_MODEL` ne télécharge pas automatiquement le modèle |
-
-Le code du briefing lit `OLLAMA_URL` depuis son propre environnement, avec la valeur par défaut `http://ollama:11434`. La variable `OLLAMA_URL` déclarée dans le service `ollama` **n'est pas transmise automatiquement** au service `embeddings`. Le nom de service `ollama` est résolu par le réseau Docker Compose.
-
-### Commandes Compose utiles
+### 1. Préparer la configuration
 
 ```bash
 cd /opt/ai-news
-# Vérifier les services et le profil IA
-sudo docker compose config --services
-sudo docker compose --profile ai ps
-
-# Démarrer les services persistants (PostgreSQL et Ollama)
-sudo docker compose --profile ai up -d postgres ollama
-
-# Vérifier que Qwen est disponible dans le stockage Ollama
-sudo docker compose exec ollama ollama list
-# Si absent : téléchargement initial du modèle (connexion Internet nécessaire)
-sudo docker compose exec ollama ollama pull qwen2.5:3b
-
-# Collecte manuelle, une exécution puis arrêt
-sudo docker compose run --rm collector
-
-# Lire les journaux
-sudo docker compose logs --tail=100 postgres ollama
-sudo docker stats
+mkdir -p output podcast/state
+# Créer ou compléter .env avec votre éditeur.
 ```
 
-`docker compose run --rm embeddings ...` et `docker compose run --rm collector` créent des conteneurs ponctuels. Le profil `ai` ne constitue pas un ordonnanceur. Pour le briefing, le conteneur Ollama doit déjà être lancé et le modèle téléchargé. L'exécution du collecteur dépend du contenu du Dockerfile et de son `CMD`/`ENTRYPOINT`, non fournis.
+Variables attendues dans `.env` (remplacer les exemples) :
 
-### Points d'exploitation à vérifier
-
-1. **Exposition de PostgreSQL :** `${POSTGRES_PORT}:5432` publie le port sur les interfaces de l'hôte par défaut. Si aucun client externe n'en a besoin, préférer une liaison locale `127.0.0.1:${POSTGRES_PORT}:5432` ou retirer `ports:`.
-2. **Version des images :** `postgres:17` est épinglé sur une version majeure ; `ollama/ollama:latest` peut évoluer lors des mises à jour. Épingler une version testée en production.
-3. **Persistance des briefings :** aucun volume de sortie n'est déclaré sur `embeddings` ; fournir `-v /opt/ai-news/output:/output` lors d'une exécution complète.
-4. **Réseau :** Ollama n'a pas de port hôte publié dans le Compose, ce qui est cohérent avec son utilisation interne.
-5. **Secrets :** `.env` contient vraisemblablement des identifiants PostgreSQL ; ne pas le versionner et éviter d'exposer `docker compose config` dans les tickets publics (il peut révéler des valeurs).
-
-## 5. Paramétrage principal : `config/briefing.yaml`
-
-| Clé | Valeur V52 | Effet réel |
-|---|---|---|
-| `briefing.language` | `fr` | `fr` : traduction ; `en` : texte anglais |
-| `briefing.max_events` | `10` | Plafond de publication |
-| `briefing.min_relevance_score` | `40` | Seuil sur le score historique ; exceptions whitelist/vulnérabilité |
-| `briefing.lookback_hours` | `72` | Fenêtre SQL |
-| `briefing.business_triage.max_candidates` | `16` | Taille cible du lot Qwen, **non plafond strict** (P1 et couverture thématique peuvent le dépasser) |
-| `briefing.business_triage.min_business_relevance` | `2` | Minimum métier Qwen sur 5 pour article ordinaire |
-| `briefing.selection.security.target` | `4` | Quota souple cybersécurité |
-| `briefing.selection.artificial_intelligence.target` | `3` | Quota souple IA |
-| `briefing.selection.regulation_and_risk.target` | `2` | Quota souple risques/réglementation |
-| `briefing.selection.gaming_and_transformation.target` | `1` | Quota souple transformation/casino |
-| `briefing.selection.flexible_quotas` | `true` | Redistribue les places inutilisées |
-| `briefing.selection.critical_security_override` | `true` | **Clé présente mais non lue en V52** ; les P1 sont toujours prioritaires |
-| `llm.model` | `qwen2.5:3b` | Modèle Ollama |
-| `llm.temperature` | `0` | Température LLM |
-| `scoring.rescore_all` | `true` | **Non exploité directement par `briefing.py` V52** |
-| `scoring.domains.*.weight` | 25/25/20/15/10/5 | **Non appliqués au classement V52** |
-| `scoring.business_context` | `LU`, `casino`, priorités | Valeurs présentes mais **non injectées dynamiquement** dans le prompt V52 |
-| `scoring.online_gaming_priority` | `low` | **Non lu directement** ; la faible priorité est codée dans le prompt |
-
-Le prompt d'évaluation métier est actuellement écrit dans `business_assessments()` ; modifier `scoring.business_context` ne le change pas.
-
-### Variables d'environnement
-
-| Variable | Défaut | Usage |
-|---|---|---|
-| `DATABASE_URL` | obligatoire | Connexion PostgreSQL ; **secret à protéger** |
-| `OLLAMA_URL` | `http://ollama:11434` | Endpoint Ollama |
-| `BRIEFING_CONFIG` | `/config/briefing.yaml` | YAML principal |
-| `WATCHLIST_FILE` | `/config/watchlists.yaml` | Règles de veille |
-| `SEMANTIC_SCORING_FILE` | `/config/semantic_scoring.yaml` | Descriptions MiniLM |
-| `GLOSSARY_CONFIG` | `/config/glossary.yaml` | Glossaire de traduction |
-| `BRIEFING_FETCH_LIMIT` | `2000` | Limite SQL de lecture |
-| `BRIEFING_DRY_RUN` | `0` | `1` : **appelle Qwen** pour évaluer, mais ne résume/traduit/écrit pas |
-| `BRIEFING_OUTPUT` | `/tmp/ai-news-briefing.md` | Chemin de sortie Markdown |
-
-### Profils `config/semantic_scoring.yaml`
-
-Le fichier disponible définit sept domaines : `cybersecurity`, `artificial_intelligence`, `risk_management`, `digital_transformation`, `regulation`, `infrastructure`, `gaming_industry`. Chaque domaine a plusieurs `descriptions` en anglais/français. V52 retient la meilleure similarité avec ces descriptions, puis les ramène aux quatre catégories du briefing :
-
-- `cybersecurity`, `infrastructure` → `security`
-- `artificial_intelligence` → `artificial_intelligence`
-- `risk_management`, `regulation` → `regulation_and_risk`
-- `digital_transformation`, `gaming_industry` → `gaming_and_transformation`
-
-Une vulnérabilité candidate est initialement classée en sécurité ; Qwen peut ensuite reclasser l'événement. Les champs `weight`, `lookback_days`, `test_limit`, `similarity_floor`, `similarity_ceiling` et `batch_size` du YAML sémantique ne sont **pas utilisés** dans le chemin de classification du briefing V52.
-
-### Règles `config/watchlists.yaml`
-
-```yaml
-whitelist:
-  - name: Technologies suivies
-    keywords: [Elasticsearch, Elastic Security, VMware, Microsoft 365]
-    scope: title_summary
-    mode: literal
-    operator: any
-blacklist:
-  - name: Jeux vidéo grand public
-    keywords: [Steam Deck, PlayStation, Xbox]
-    scope: title_summary
-    mode: literal
-    operator: any
-    absolute: false
+```dotenv
+POSTGRES_DB=ai_news
+POSTGRES_USER=ai_news
+POSTGRES_PASSWORD=mot_de_passe_a_remplacer
+POSTGRES_PORT=5432
+# Seulement pour la publication SFTP :
+PODCAST_SFTP_USER=utilisateur_sftp
+PODCAST_SFTP_PASSWORD=mot_de_passe_sftp
 ```
 
-- `scope`: `title`, `title_summary` (défaut), `all` (inclut le contenu si transmis ; `briefing.py` ne transmet que titre/résumé).
-- `mode`: `literal` (sous-chaîne, insensible à la casse), `regex` (expression régulière).
-- `operator`: `any` (défaut) ou `all`.
-- `absolute: true` sur blacklist : exclusion sans exception, **y compris vulnérabilité critique**.
-- Une blacklist ordinaire peut être contournée par une whitelist ou une vulnérabilité candidate. La whitelist garantit l'accès au triage, **pas la publication**.
-
-## 5 bis. Collecteur RSS/Atom : fonctionnement confirmé dans le code
-
-Le collecteur utilise `feedparser`, `urllib.request`, `psycopg`, `PyYAML`, `hashlib`, et la fonction interne `app.normalizer.normalize_text`. Son entrée est `SOURCES_FILE` (par défaut `/app/config/sources.yaml`), qui contient une liste `sources`. Le collecteur est un **programme à exécution unique** : chaque appel parcourt toutes les sources activées, puis normalise les articles encore en attente. Il n'intègre ni boucle de polling ni temporisation périodique.
-
-### Étapes de collecte
-
-1. Lire `sources.yaml` ; ignorer les sources avec `enabled: false` (ou une valeur fausse). `enabled` vaut `true` par défaut si le champ manque.
-2. Pour chaque source, enregistrer ou mettre à jour son nom dans `sources` avec `ON CONFLICT (feed_url) DO UPDATE`, puis créer une entrée `collection_runs`.
-3. Effectuer une requête HTTP(S) avec `urllib.request.urlopen(..., timeout=15)`, un `User-Agent` de navigateur et des en-têtes `Accept` RSS/Atom/XML. Le téléchargement est limité à **10 Mio** (`10 * 1024 * 1024` octets).
-4. Parser le flux avec `feedparser.parse`. Si `feed.bozo` est vrai et qu'aucune entrée n'est disponible, lever une erreur ; si des entrées sont présentes, traiter le flux et enregistrer le statut `partial`.
-5. Pour chaque entrée, exiger `link` et `title`. Prendre `entry.id` comme GUID, sinon l'URL ; récupérer `summary`, le premier `content[0].value` disponible, l'auteur et la date de publication.
-6. Calculer `content_hash = SHA-256(title + "\n" + summary + "\n" + content)` ; insérer l'article avec `ON CONFLICT (source_id, guid) DO NOTHING`. Le hash est **stocké**, mais **n'est pas utilisé pour dédupliquer lors de l'insertion** dans ce code.
-7. Enregistrer `sources.last_fetched_at` et finaliser `collection_runs` avec `status`, `articles_found`, `articles_inserted`, `finished_at`.
-8. Après toutes les sources, sélectionner les articles dont `normalized_content` ou `normalized_summary` est `NULL`, appliquer `normalize_text` aux deux champs et enregistrer les mises à jour.
-
-### Gestion des dates et des erreurs
-
-- Date : tenter `published` puis `updated` avec `email.utils.parsedate_to_datetime`; sinon `published_parsed` puis `updated_parsed`; sans date exploitable, `published_at = NULL`.
-- Les dates sans fuseau explicite sont interprétées en UTC.
-- Une erreur sur un flux entraîne un `rollback`, une entrée `collection_runs` avec `status='failed'` et `error_message` tronqué à 4 000 caractères, puis le passage au flux suivant.
-- La normalisation intervient **après** la boucle des flux ; une erreur de normalisation peut interrompre l'exécution globale.
-- Les transactions sont validées après chaque source. Les logs indiquent le nombre d'articles trouvés et nouveaux.
-
-### Champs de données observés
-
-| Table / vue | Champs utilisés par le code fourni | Utilisation |
-|---|---|---|
-| `sources` | `id`, `name`, `feed_url`, `last_fetched_at` | Catalogue des flux et dernier passage |
-| `collection_runs` | `id`, `source_id`, `finished_at`, `status`, `articles_found`, `articles_inserted`, `error_message` | Historique de collecte et incidents |
-| `articles` | `id`, `source_id`, `guid`, `url`, `title`, `author`, `summary`, `content`, `published_at`, `content_hash`, `normalized_content`, `normalized_summary` | Articles bruts et normalisés |
-| `unique_articles` | `id`, `title`, `normalized_summary`, `relevance_score`, `published_at`, URL détectée | Lecture pour le briefing ; définition SQL non fournie |
-
-**Hypothèses de schéma :** le code attend une contrainte d'unicité sur `sources.feed_url` et sur `(articles.source_id, articles.guid)`. Sans le DDL SQL, on ne peut pas confirmer leur création. Les champs `category` du fichier `sources.yaml` ne sont pas insérés en base par ce collecteur. Il n'effectue pas non plus de classification, de calcul de `relevance_score`, de mise à jour des articles déjà présents, ni de suppression des anciens articles.
-
-### Points de vigilance sur les flux
-
-- Une URL de flux obsolète, redirigée ou indisponible peut échouer ; vérifier périodiquement `collection_runs`.
-- Les flux ne fournissant pas de date exploitable peuvent produire des articles avec `published_at = NULL`, que la requête de briefing V52 n'inclut pas (`WHERE published_at BETWEEN ...`).
-- Un GUID stable empêche la réinsertion, même si l'éditeur modifie le titre ou le contenu d'un article déjà collecté : `ON CONFLICT ... DO NOTHING` ne met pas à jour les articles existants.
-- La normalisation de **tous** les articles en attente est exécutée à chaque collecte, sans limite de lot ; elle peut être coûteuse si la file d'attente grossit.
-- `urlparse` est importé mais non utilisé dans l'extrait fourni ; aucune validation explicite du schéma d'URL des flux n'est visible. Éviter de charger des sources non fiables sans contrôle, notamment pour prévenir les accès réseau internes non souhaités.
-- Le collecteur ne filtre pas les articles selon leur catégorie : les règles de pertinence et de sécurité s'appliquent plus tard dans le pipeline.
-
-### Requêtes de diagnostic SQL
-
-```sql
--- État des dernières collectes par flux
-SELECT s.name, s.feed_url, s.last_fetched_at,
-       r.status, r.finished_at, r.articles_found,
-       r.articles_inserted, r.error_message
-FROM sources AS s
-LEFT JOIN LATERAL (
-    SELECT * FROM collection_runs AS cr
-    WHERE cr.source_id = s.id
-    ORDER BY cr.id DESC LIMIT 1
-) AS r ON TRUE
-ORDER BY s.name;
-
--- Articles restant à normaliser
-SELECT COUNT(*) AS pending_normalization
-FROM articles
-WHERE normalized_content IS NULL OR normalized_summary IS NULL;
-
--- Distribution des statuts de collecte
-SELECT status, COUNT(*) FROM collection_runs GROUP BY status ORDER BY status;
-```
-
-## 6. Pipeline détaillé
-
-1. **SQL** : lecture de `unique_articles` (`id`, `title`, `normalized_summary`, `relevance_score`, `published_at` et colonne URL autodétectée), sur les dernières `lookback_hours` heures, tri par date descendante, limite `BRIEFING_FETCH_LIMIT`.
-2. **Filtrage** : titre, blacklist absolue/ordinaire, préfixes de newsletters, résumé, score historique et exceptions de whitelist/vulnérabilité.
-3. **Détection** : regex CVE, CVSS, exploitation active, vulnérabilités et correctifs. `P1_review` = exploitation mentionnée ; `P2_review` = critique/CVSS ≥9 ; `P3_review` = autre candidat ; `none` = pas de signal. **Ce sont des alertes textuelles provisoires.**
-4. **Boost initial** : score max entre l'historique et P1=95, P2=85, P3=65, whitelist=75.
-5. **MiniLM** : vecteurs des descriptions et des articles (titre + 650 premiers caractères du résumé), classification et similarité interarticles.
-6. **Déduplication** : identifiants CVE ou ZDI-CAN incompatibles empêchent une fusion ; même URL canonique ou titre normalisé peut fusionner ; sinon forte similarité (`>= max(0.93, THRESHOLD)`) ET recouvrement des termes distinctifs du titre. Chaque nouvel élément doit être compatible avec tout le groupe.
-7. **Présélection** : événements P1, puis candidats de chaque catégorie, puis compléments. `max_candidates` peut être dépassé.
-8. **Qwen métier** : JSON `business_relevance` (0–5), `news_importance` (0–5), `category`, `reason`. Classement secondaire `12 × business_relevance + 8 × news_importance`. En cas d'erreur, notes 0 ; P1 maintenus.
-9. **Sélection** : P1 en premier, puis quotas thématiques, puis redistribution si activée ; au plus `max_events` événements. Une sélection de moins de dix événements est possible.
-10. **Résumé** : Qwen reçoit jusqu'à trois articles du même groupe ; JSON `title` et `summary` anglais. Consignes de factualité (ne pas inventer de CVE, dates, impacts ou auteurs).
-11. **Traduction** : MarianMT anglais→français ; le glossaire protège les termes techniques ; perte d'un marqueur = événement non publié.
-12. **Markdown** : horodatage UTC, nombre d'articles et événements, titres, résumés, score **historique/boosté** (pas la note Qwen), liens des sources.
-
-### Limites et vigilance
-
-- Qwen2.5:3b peut halluciner ; toujours recouper les CVE, CVSS, dates, impacts et obligations réglementaires.
-- Le texte des flux RSS est non fiable et peut contenir des tentatives de *prompt injection*.
-- Le regroupement est volontairement conservateur ; quelques doublons peuvent subsister.
-- Aucun cache des évaluations Qwen : elles sont répétées à chaque exécution.
-- La politique P1 est prioritaire même si la pertinence métier est faible ; elle ne confirme pas une exploitation réelle.
-- Les poids `scoring.domains` ne modifient pas directement les scores V52.
-
-## 7. Catalogue RSS/Atom
-
-Le fichier `sources.yaml` fourni provient d'un export Feedly OPML. **63 flux, tous `enabled: true` dans le fichier de référence**, dont **46 classés `Securité`**. Les URL sont recopiées telles que fournies et **n'ont pas été testées**. L'appartenance au catalogue ne prouve pas que le collecteur actif lit actuellement ce fichier ni que le flux répond.
-
-| Catégorie source | Nombre |
-|---|---:|
-
-
-| Securité | 46 |
-| Actu societé IT | 6 |
-| Divers | 3 |
-| Informatique | 2 |
-| Web-2.0 | 2 |
-| Linux | 1 |
-| Php | 1 |
-| Technologies | 1 |
-| Cloud | 1 |
-
-
-### Inventaire intégral des sources
-
-| # | Source | Catégorie | URL | Activé |
-|---:|---|---|---|---|
-
-
-| 1 | Schneier on Security | Securité | `http://www.schneier.com/blog/index.rdf` | oui |
-
-
-| 2 | Darknet – Hacking Tools, Hacker News & Cyber Security | Securité | `http://feeds.feedburner.com/darknethackers` | oui |
-
-
-| 3 | Deriving Cyber Threat Intelligence and Driving Threat Hunting | Securité | `http://malwarenailed.blogspot.com/feeds/posts/default?alt=rss` | oui |
-
-
-| 4 | Microsoft Admin Center Status | Securité | `https://status.office365.com/api/feed/mac` | oui |
-
-
-| 5 | Sécurité informatique : Toute l’actualité sur Le Monde.fr. | Securité | `http://www.lemonde.fr/rss/tag/securite-informatique.xml` | oui |
-
-
-| 6 | MONARC | Securité | `https://www.monarc.lu/feeds/all.atom.xml` | oui |
-
-
-| 7 | Dr. Fu's Security Blog | Securité | `http://fumalwareanalysis.blogspot.com/feeds/posts/default` | oui |
-
-
-| 8 | ZDI: Published Advisories | Securité | `https://www.zerodayinitiative.com/rss/published/` | oui |
-
-
-| 9 | /dev/random | Securité | `http://feeds.feedburner.com/dev/rand` | oui |
-
-
-| 10 | ZATAZ.COM | Securité | `https://www.zataz.com/rss/zataz-news.rss` | oui |
-
-
-| 11 | UnderNews | Securité | `http://feeds.feedburner.com/undernews/oCmA` | oui |
-
-
-| 12 | Azure Status | Securité | `https://azure.status.microsoft/status/feed/` | oui |
-
-
-| 13 | Varonis Blog | Securité | `http://feeds.feedburner.com/metadata-era-varonis` | oui |
-
-
-| 14 | Trend Micro Research, News, Perspectives | Securité | `http://feeds.trendmicro.com/Anti-MalwareBlog/` | oui |
-
-
-| 15 | ClearSky Cyber Security | Securité | `http://www.clearskysec.com/feed/` | oui |
-
-
-| 16 | SCRT Team Blog | Securité | `http://blog.scrt.ch/feed/` | oui |
-
-
-| 17 | Krebs on Security | Securité | `http://krebsonsecurity.com/feed/` | oui |
-
-
-| 18 | BleepingComputer | Securité | `http://www.bleepingcomputer.com/feed/` | oui |
-
-
-| 19 | darkreading | Securité | `https://www.darkreading.com/rss_simple.asp` | oui |
-
-
-| 20 | Blog RSS Feed | Securité | `http://feeds.feedburner.com/tripwire-state-of-security` | oui |
-
-
-| 21 | Clusif | Securité | `https://clusif.fr/feed/` | oui |
-
-
-| 22 | ZDI: Upcoming Advisories | Securité | `https://www.zerodayinitiative.com/rss/upcoming/` | oui |
-
-
-| 23 | Securelist | Securité | `https://securelist.com/feed/` | oui |
-
-
-| 24 | Actualités securite | Securité | `http://www.lemondeinformatique.fr/flux-rss/thematique/securite/rss.xml` | oui |
-
-
-| 25 | Sophos Blogs | Securité | `http://blogs.sophos.com/feed/` | oui |
-
-
-| 26 | Control Manager RSS | Securité | `http://downloadcenter.trendmicro.com/pull/feed/product/7?region=NABU` | oui |
-
-
-| 27 | MISP Open Source Threat Intelligence Platform & Open Standards For Threat Intelligence Sharing | Securité | `http://www.misp-project.org/feed.xml` | oui |
-
-
-| 28 | Troy Hunt's Blog | Securité | `http://feeds.feedburner.com/TroyHunt` | oui |
-
-
-| 29 | CIRCL updates | Securité | `https://www.circl.lu/rss.xml` | oui |
-
-
-| 30 | Microsoft Security Blog | Securité | `https://www.microsoft.com/security/blog/feed/` | oui |
-
-
-| 31 | Latest from TechRadar | Securité | `https://www.techradar.com/rss` | oui |
-
-
-| 32 | Security Labs – Qualys Blog | Securité | `https://community.qualys.com/blogs/securitylabs/feeds/posts` | oui |
-
-
-| 33 | Information Security | Securité | `http://www.information-security.fr/feed/` | oui |
-
-
-| 34 | The Hacker News | Securité | `http://thehackernews.com/feeds/posts/default` | oui |
-
-
-| 35 | CERT-FR | Securité | `http://www.cert.ssi.gouv.fr/site/cert-fr_alerte.rss` | oui |
-
-
-| 36 | RSS - Actualités CNIL | Securité | `http://www.cnil.fr/rss-cnil/` | oui |
-
-
-| 37 | dirkjanm.io | Securité | `https://dirkjanm.io/feed.xml` | oui |
-
-
-| 38 | Actualités du SSTIC | Securité | `http://www.sstic.org/feeds/latest/` | oui |
-
-
-| 39 | CISA Cybersecurity Advisories | Securité | `https://www.us-cert.gov/ncas/alerts.xml` | oui |
-
-
-| 40 | Zero Day Initiative - Blog | Securité | `https://www.zerodayinitiative.com/blog/?format=rss` | oui |
-
-
-| 41 | Blaze's Security Blog | Securité | `http://bartblaze.blogspot.com/feeds/posts/default` | oui |
-
-
-| 42 | Veille Cyber N59 – 11 janvier 2016 | Securité | `https://veillecyberland.wordpress.com/feed/` | oui |
-
-
-| 43 | DATA SECURITY BREACH | Securité | `http://datasecuritybreach.fr/feed/` | oui |
-
-
-| 44 | 360 Netlab Blog - Network Security Research Lab at 360 | Securité | `http://blog.netlab.360.com/rss/` | oui |
-
-
-| 45 | NoLimitSecu | Securité | `http://www.nolimitsecu.fr/feed/` | oui |
-
-
-| 46 | Have I Been Pwned latest breaches | Securité | `http://feeds.feedburner.com/HaveIBeenPwnedLatestBreaches` | oui |
-
-
-| 47 | Linux Journal - The Original Magazine of the Linux Community | Linux | `http://www.linuxjournal.com/node/feed` | oui |
-
-
-| 48 | :: onpk :: blog PHP, MySQL, développement web & connexe(s) | Php | `http://www.onpk.net/rss.xml` | oui |
-
-
-| 49 | Slashdot: Linux | Informatique | `http://rss.slashdot.org/Slashdot/slashdotLinux` | oui |
-
-
-| 50 | Tech2Tech \| News, Astuces, Tutos, Vidéos autour de l'informatique | Informatique | `http://www.tech2tech.fr/feed/` | oui |
-
-
-| 51 | Announcements \| Microsoft Azure Blog \| Microsoft Azure | Actu societé IT | `http://azure.microsoft.com/blog/topics/announcements/feed/` | oui |
-
-
-| 52 | Microsoft Azure Blog > Mark Russinovich | Actu societé IT | `https://azure.microsoft.com/en-us/blog/author/markruss/feed/` | oui |
-
-
-| 53 | Channelnews.fr - l'actualité du business de l'informatique et des télécoms | Actu societé IT | `http://www.channelnews.fr/index.php?format=feed&type=rss` | oui |
-
-
-| 54 | Azure Status | Actu societé IT | `https://azurestatuscdn.azureedge.net/en-us/status/feed/` | oui |
-
-
-| 55 | Les news de Korben | Actu societé IT | `http://feeds.feedburner.com/KorbensBlog-UpgradeYourMind` | oui |
-
-
-| 56 | Announcements \| Microsoft Azure Blog \| Microsoft Azure | Actu societé IT | `https://azure.microsoft.com/en-us/blog/topics/updates/feed/` | oui |
-
-
-| 57 | Global Security Mag Online | Technologies | `http://www.globalsecuritymag.fr/spip.php?page=backend` | oui |
-
-
-| 58 | AccessOWeb | Web-2.0 | `http://feeds.feedburner.com/accessoweb/XGSC` | oui |
-
-
-| 59 | FredCavazza.net | Web-2.0 | `http://www.fredcavazza.net/feed/` | oui |
-
-
-| 60 | Cybernetica | Cloud | `https://www.codesouverain.fr/rss/` | oui |
-
-
-| 61 | Silicon | Divers | `http://www.silicon.fr/feed` | oui |
-
-
-| 62 | Le Journal du Geek | Divers | `http://feeds2.feedburner.com/LeJournalduGeek` | oui |
-
-
-| 63 | LesCasinos.org - Actualités | Divers | `http://www.lescasinos.org/rss/flux.xml` | oui |
-
-
-### Ajouter ou désactiver un flux
-
-```yaml
-sources:
-  - name: Exemple
-    url: https://example.org/rss
-    category: Securité
-    enabled: true
-```
-
-Les champs observés sont `name`, `url`, `category`, `enabled`. Le collecteur fourni lit `SOURCES_FILE=/app/config/sources.yaml`, parcourt `sources` et ignore les entrées avec `enabled: false`. **Attention :** le Compose ne monte pas le répertoire `./config` dans `collector` ; les modifications sur l’hôte nécessitent potentiellement une reconstruction de son image, selon le Dockerfile non fourni. Les catégories sources ne sont pas les catégories métier MiniLM/Qwen.
-
-## 8. Installation, exécution et diagnostics
-
-### Contrôles de l'environnement
+### 2. Construire et démarrer les services
 
 ```bash
-cd /opt/ai-news
-sudo docker compose config
-sudo docker compose ps
-sudo docker compose run --rm embeddings python -m py_compile embeddings/briefing.py
+docker compose --profile ai config --quiet
+docker compose --profile ai build collector embeddings audio podcast
+docker compose --profile ai up -d --wait postgres ollama
+docker compose exec ollama ollama pull qwen2.5:3b
 ```
 
-### Mise à jour
+PostgreSQL et Ollama restent démarrés. Les autres services s’exécutent à la demande. Le profil `xtts` est une alternative audio distincte. Les limites mémoire des conteneurs s’additionnent : 6 Go pour `embeddings`, 4 Go pour Ollama, 2 Go pour `audio` ; surveiller la mémoire sur une machine de 8 Go.
+
+### 3. Initialiser le schéma SQL
+
+Compose ne monte pas de scripts d’initialisation PostgreSQL. Sur une base neuve, appliquer les quatre fichiers dans l’ordre :
 
 ```bash
-cd /opt/ai-news
-cp embeddings/briefing.py embeddings/briefing.py.backup
-cp config/briefing.yaml config/briefing.yaml.backup
-# Copier depuis l'archive V52 : embeddings/briefing.py et config/briefing.yaml
-sudo docker compose build embeddings
+for sql in app/sql/001_initial_schema.sql \
+           app/sql/002_normalized_content.sql \
+           app/sql/003_article_scoring.sql \
+           app/sql/004_unique_articles.sql; do
+  docker compose exec -T postgres sh -c \
+    'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$sql" || break
+done
 ```
 
-Conserver les fichiers `watchlists.yaml` et `semantic_scoring.yaml` déjà personnalisés.
+Vérifier que chaque fichier s’est terminé sans erreur avant de poursuivre. Les scripts actuels utilisent `IF NOT EXISTS` ou `CREATE OR REPLACE VIEW`.
 
-### DRY RUN V52 (Qwen appelé)
+## Exécution étape par étape
+
+### 1. Collecter et normaliser
 
 ```bash
-sudo docker compose run --rm \
-  -v /opt/ai-news/config:/config:ro \
-  -e BRIEFING_DRY_RUN=1 \
-  embeddings python -m embeddings.briefing
+docker compose run --rm -T collector
 ```
 
-Cette commande lit PostgreSQL, charge MiniLM, appelle Qwen pour les évaluations et affiche la sélection. **Elle ne génère pas de résumé, ne traduit pas et n'écrit pas le Markdown.** La durée peut être de plusieurs minutes sans GPU.
+Le collecteur parcourt les sources activées, insère les nouveaux articles, puis normalise le HTML. Un article existant de même source et même GUID n’est pas mis à jour. Les erreurs de flux sont enregistrées dans `collection_runs` et les autres flux continuent.
 
-### Génération complète avec fichier persistant
+**Comportement actuel : une source avec `enabled: false` entraîne la suppression de ses articles en base au début de la collecte.**
+
+Le catalogue est copié dans l’image du collecteur : après modification de `config/sources.yaml`, reconstruire :
 
 ```bash
-mkdir -p /opt/ai-news/output
-sudo docker compose run --rm \
-  -v /opt/ai-news/config:/config:ro \
-  -v /opt/ai-news/output:/output \
+docker compose build collector
+```
+
+### 2. Calculer les scores
+
+```bash
+docker compose run --rm -T collector python -m app.scorer
+```
+
+Le score combine `config/scoring.yaml` et le bonus métier de `config/briefing.yaml`. Il est utilisé pour filtrer les candidats du briefing. `scoring.rescore_all: true` recalcule toute la base ; sinon les scores absents ou anciens de plus de 12 heures sont traités.
+
+Pour reprendre uniquement une normalisation incomplète :
+
+```bash
+docker compose run --rm -T collector python -m app.normalize_articles
+```
+
+### 3. Vérifier la sélection sans générer le briefing
+
+```bash
+docker compose --profile ai run --rm -T \
+  -e BRIEFING_DRY_RUN=1 embeddings python -m embeddings.briefing
+```
+
+Ce contrôle charge MiniLM et appelle Qwen pour la déduplication et l’évaluation. Il ne fait ni synthèse, ni traduction, ni écriture du Markdown.
+
+### 4. Générer le briefing
+
+```bash
+docker compose --profile ai run --rm -T \
+  -e BRIEFING_DRY_RUN=0 \
   -e BRIEFING_OUTPUT=/output/briefing.md \
   embeddings python -m embeddings.briefing
-cat /opt/ai-news/output/briefing.md
+cat output/briefing.md
 ```
 
-**Important** : sans volume de sortie, `/tmp/ai-news-briefing.md` reste dans le conteneur éphémère et peut disparaître après `run --rm`.
+Le montage `./output:/output` conserve le résultat après suppression du conteneur. Sans `BRIEFING_OUTPUT`, le chemin par défaut est `/tmp/ai-news-briefing.md`, non persistant.
 
-### Tests unitaires rapides
+Le briefing filtre les articles récents selon le score et les règles de veille, puis regroupe les événements. Qwen évalue leur pertinence technique, leur importance et leur pertinence métier. La sélection applique les quotas thématiques et donne priorité aux P1 si l’option est activée. Les synthèses sont produites en anglais, puis traduites en français avec protection des termes techniques. Une annexe peut ajouter des liens vers des alertes P1/P2 évaluées mais non retenues. Le nombre publié peut être inférieur au plafond configuré.
+
+### 5. Générer le MP3
+
+Avec le moteur actuel `kokoro`, ces fichiers locaux sont nécessaires :
+
+```text
+audio/models/kokoro/config.json
+audio/models/kokoro/kokoro-v1_0.pth
+audio/models/kokoro/voices/ff_siwis.pt
+```
+
+Ils sont montés dans `/models`. Les modèles présents sont actuellement suivis par Git malgré la règle de `.gitignore`. Le conteneur audio est configuré en mode Hugging Face hors ligne.
 
 ```bash
-sudo docker compose run --rm embeddings python - <<'PYTEST'
-from embeddings.vulnerability_detector import detect
-from embeddings.watchlist import load_rules, evaluate
-print(detect('Max severity SonicWall SMA1000 flaw now exploited in attacks'))
-print(evaluate('Steam Deck gaming news', '', config=load_rules()))
-PYTEST
+docker compose --profile ai run --rm -T audio
+ls -lh "output/$(TZ=Europe/Paris date +%F)-briefing.mp3"
 ```
 
-Pour les erreurs : vérifier `DATABASE_URL`, accès à PostgreSQL, résolution `ollama`, modèle installé, montage `/config`, RAM, permissions du répertoire de sortie et disponibilité des fichiers du glossaire. `sacremoses` est recommandé par MarianTokenizer mais son absence a seulement produit un avertissement lors du test V50.
+`config/audio.yaml` indique l’entrée Markdown, le moteur, la voix, les pauses et le débit. Le module préfixe automatiquement le nom de sortie par la date en Europe/Paris.
 
-## 9. Sécurité et exploitation
+Le MP3 est mono, encodé à 22 050 Hz. Les paramètres se règlent dans le YAML : `pause_ms` entre articles, `title_pause_ms` après les titres et rubriques (0 à 10 000 ms), et `bitrate` parmi `24k`, `32k`, `40k`, `48k`. Vérifier à l’écoute les sigles, noms propres, CVE et anglicismes ; les pauses ne garantissent pas une prosodie particulière. Vérifier aussi les licences des modèles et voix utilisés.
 
-- Ne jamais enregistrer `DATABASE_URL` en clair dans les logs ou le dépôt Git.
-- Compte SQL à privilèges minimaux ; le briefing nécessite uniquement des lectures.
-- Considérer les résumés RSS comme des entrées externes potentiellement malveillantes.
-- Conserver les liens sources et exiger une vérification humaine avant toute décision de remédiation ou de conformité.
-- Surveiller les temps d'exécution CPU/RAM et les erreurs Ollama/MarianMT.
-- Le Compose réel fourni ne définit **aucune planification** ; le lancement périodique doit être assuré à l’extérieur (cron, systemd timer ou autre orchestrateur).
-- La proportion de flux cybersécurité (46/63) biaise l'approvisionnement ; compléter à terme avec des sources officielles LU/UE et casino terrestre si nécessaire.
+Pour utiliser **Piper**, définir `engine: piper` dans `config/audio.yaml` et fournir le modèle ONNX ainsi que son fichier `.onnx.json` dans `audio/models/`. La voix française configurée est `/models/fr_FR-tom-medium.onnx`.
 
-## 10. État des validations et pistes d'amélioration
+```bash
+docker compose --profile ai build audio
+docker compose --profile ai run --rm -T audio
+```
 
-| Contrôle | État |
-|---|---|
-| Détection vulnérabilités et watchlists | Tests V50 validés |
-| Génération de bout en bout V50 | Exécutée (~212 s, 5 événements) |
-| DRY RUN V51 | Exécuté, newsletter exclue après correction regex |
-| V52 syntaxe Python | Vérifiée à la préparation |
-| V52 DRY RUN avec évaluation Qwen | **Exécuté** : 97 articles, 94 événements, 16 candidats Qwen, 9 sélectionnés |
-| V52 génération complète | À exécuter |
-| Disponibilité des 63 flux | Non vérifiée |
-| Compose et collecteur | **Fournis et documentés** ; pas de validation indépendante du déploiement |
-| Schéma SQL complet, Dockerfiles, ordonnanceur | Non fournis ; aucun ordonnanceur défini dans le Compose |
+Pour utiliser **XTTS**, définir `engine: xtts` et utiliser le service dédié, qui installe Coqui TTS. Le modèle nommé `tts_models/multilingual/multi-dataset/xtts_v2` utilise le cache `audio/models/xtts/` ; le premier lancement peut nécessiter un téléchargement. La référence vocale configurée est `audio/voices/homme_fr.wav`, montée dans `/voices/homme_fr.wav`.
 
-**Améliorations envisagées :** cache des notes Qwen, traçabilité du triage, prompts et contexte métier réellement pilotés par YAML, tests de non-régression de la déduplication, alertes P1 hors quota éditorial, stockage persistant et planification documentée.
+```bash
+docker compose --profile xtts build xtts
+docker compose --profile xtts run --rm -T xtts
+```
 
----
+Repasser `engine: kokoro` pour le script quotidien, qui impose ce moteur. La génération audio produit le MP3 local ; la publication du RSS est réalisée à l’étape suivante.
 
-Documentation V52 — 10 octobre 2026. Le fichier `sources.reference.yaml` fourni avec l'archive est une **copie de référence** de l'export, pas une nouvelle configuration déployée automatiquement.
+### 6. Préparer et publier le podcast (optionnel)
 
+Adapter `config/podcast.yaml` : URL publique, métadonnées, destination SFTP et rétention. Fournir `podcast/cover.jpg` et les identifiants dans `.env`. La clé du serveur doit être vérifiée et présente dans le fichier `known_hosts` monté par Compose ; son chemin hôte actuel est `/home/seb/.ssh/known_hosts`.
 
+Utiliser une illustration JPEG carrée, idéalement 3 000 × 3 000 pixels en RGB. Vérifier `sftp.remote_path` depuis la session SFTP. L’adresse `podcast.email` apparaît publiquement dans le RSS : choisir une adresse de contact adaptée.
 
-## V54 — déduplication contrôlée et diversité stratégique
+Pour récupérer la clé du serveur, `ssh-keyscan -p 22 ftp.cluster030.hosting.ovh.net` peut l’afficher ; vérifier son empreinte auprès d’une source de confiance avant de l’ajouter au fichier `known_hosts`.
 
-**Différences avec V53** :
+Une clé SSH peut remplacer le mot de passe : la monter en lecture seule dans le service `podcast`, puis définir son chemin **dans le conteneur** via `.env` :
 
-- Deuxième passe facultative de déduplication des alertes de sécurité : au plus `max_dedup_reviews` arbitrages Qwen. Les deux articles doivent mentionner au moins un **même produit reconnu** et ne pas comporter de CVE/ZDI ou de versions explicitement contradictoires. Qwen doit confirmer le même événement avec une confiance >= 0,85 et un élément de preuve textuel. En cas d'échec ou d'incertitude, les articles restent distincts. Ce mécanisme ne garantit pas l'absence de doublons et ne remplace pas une vérification humaine.
-- Importance des vulnérabilités : minimum 5/5 pour `P1_review`, 4/5 pour `P2_review`, 2/5 pour les autres candidats. Ces niveaux **priorisent la revue** et ne certifient pas la gravité réelle.
-- Présélection par rotation entre thèmes `regulation`, `risk`, `transformation`, `ai`, `other`, puis compléments sécurité. Le nombre d'évaluations Qwen reste approximativement borné par `max_candidates`, sauf P1.
-- Veille stratégique : plafonds par thème, sans remplissage artificiel ; les sujets de titres très similaires sont évités. Une rubrique peut donc contenir moins de six événements.
-- Applicabilité : sans inventaire déclaré, une simple mention d'un produit ne suffit plus pour `potential` ; le statut reste `unknown`. `confirmed` signifie uniquement présence déclarée du produit, **pas vulnérabilité confirmée**.
+```dotenv
+PODCAST_SFTP_KEY_FILE=/run/secrets/ovh_sftp_key
+# Surcharges facultatives de config/podcast.yaml :
+PODCAST_SFTP_HOST=ftp.cluster030.hosting.ovh.net
+PODCAST_SFTP_PORT=22
+```
 
-Configuration `briefing.business_triage` :
+Exemple de montage à ajouter aux volumes existants :
 
 ```yaml
-max_candidates: 24
-max_dedup_reviews: 6
-max_security_alerts: 4
-max_strategic_events: 6
-max_p1_overflow: 2
-min_business_relevance: 2
-strategic_topic_targets:
-  ai: 2
-  regulation: 1
-  risk: 1
-  transformation: 1
-  other: 1
+      - /chemin/hote/cle_privee:/run/secrets/ovh_sftp_key:ro
 ```
 
-Le classement par thème est heuristique et dépend des mots présents dans le titre et le résumé. Les objectifs ne garantissent pas que les flux contiennent des articles adéquats. Les arbitrages Qwen ajoutent jusqu'à six appels par briefing.
+`PODCAST_SFTP_PASSWORD` n’est pas nécessaire avec cette clé. Le programme de publication est `podcast/publish.py` ; son image est construite par `podcast/Dockerfile`.
 
-**Test sans publication :**
+Le montage `./podcast/state:/state` conserve l’historique RSS entre les exécutions. Chaque MP3 publié reçoit un nom unique `AAAA-MM-JJ-<empreinte SHA-256>-briefing.mp3`, utilisé aussi comme identifiant RSS. Plusieurs fichiers différents publiés le même jour ajoutent plusieurs épisodes ; republier le même fichier le même jour conserve une seule entrée et sa date initiale. Le fichier local reste `output/AAAA-MM-JJ-briefing.mp3`.
 
 ```bash
-cd /opt/ai-news
-sudo docker compose build embeddings
-sudo docker compose run --rm -e BRIEFING_DRY_RUN=1 embeddings python -m embeddings.briefing
+# Vérifie les fichiers et leur lecture, sans connexion SFTP.
+docker compose --profile ai run --rm -T podcast --dry-run
+# Publie le MP3, l’illustration et le RSS sur le serveur configuré.
+docker compose --profile ai run --rm -T podcast
 ```
 
-Le DRY RUN appelle Qwen pour la déduplication et les scores, mais n'effectue ni synthèse, ni traduction, ni écriture de briefing. L'exécution de bout en bout doit être validée sur l'installation cible.
+Après publication, vérifier le RSS à l’adresse configurée, actuellement <https://podcast.chauchard.info/podcast.xml>, ainsi que les liens MP3. La description des épisodes reprend les titres et les sources du Markdown (`**Sources :**`, `Sources:` ou listes de liens après un bloc sources). Si le format du briefing change, vérifier son interprétation avec `--dry-run`.
 
+Le contrôle à blanc nécessite déjà le MP3 daté, le Markdown et l’illustration. La publication transfère d’abord le MP3 et l’illustration, puis remplace atomiquement le RSS avant de supprimer les MP3 distants expirés (7 jours calendaires actuellement). Seuls les MP3 de briefing expirés portant le nom daté historique ou le nouveau nom avec empreinte sont supprimés. Conserver `podcast/state/episodes.json` : les anciens épisodes ne sont pas reconstruits depuis le serveur. Si cet historique a déjà été perdu, cette correction conserve les nouveaux épisodes mais ne restaure pas les précédents.
 
-## V55 — priorité optionnelle dans la watchlist existante
+### 7. Envoyer le briefing par mail (optionnel)
 
-La V55 conserve `/config/watchlists.yaml` comme unique configuration de whitelist/blacklist.
-Chaque règle whitelist accepte désormais `priority: high` ou `priority: normal`
-(`normal` par défaut). `watchlist.py` renvoie `whitelist_priority` en plus des
-champs historiques, sans les modifier. La priorité départage uniquement les
-articles de score métier/importance identique ; elle ne garantit pas la
-sélection et ne masque pas les vulnérabilités hors watchlist.
+Le service `mailer` transforme `output/briefing.md` en mail HTML avec titres, listes, tableaux et liens sources. Il joint aussi une version texte dans le même message. L’envoi est indépendant de l’audio et du podcast.
 
-Le bonus historique de présélection de 75 pour les articles whitelist reste
-actif : il aide ces articles à atteindre l'évaluation Qwen mais ne les fait
-pas passer au-dessus du seuil de pertinence métier final.
+Modifier `config/mail.yaml` :
 
-`technology_inventory` a été supprimé du YAML : la watchlist n'est pas un
-inventaire des produits déployés. Le statut d'applicabilité reste `unknown`
-en l'absence de preuve externe, même pour les technologies suivies.
+```yaml
+input: /output/briefing.md
+sender: "AI News <ai-news@example.com>"
+recipient: destinataire@example.com
+subject: "AI News — Briefing du {date}"
+smtp:
+  host: smtp.example.com
+  port: 587
+  security: starttls
+  auth: true
+  timeout: 30
+```
 
-L'exemple `config/watchlists.example.yaml` est indicatif : **conservez votre
-`config/watchlists.yaml` existant** et ajoutez `priority` à vos règles si
-souhaité. Remplacez `embeddings/briefing.py`, `embeddings/watchlist.py` et
-`config/briefing.yaml`, puis reconstruisez le service embeddings.
+`{date}` est remplacé par la date en Europe/Paris. Choisir `starttls` pour une connexion mise à niveau TLS (généralement port 587), ou `ssl` pour TLS dès la connexion (généralement port 465). La vérification du certificat est activée. `none` est réservé à un relais sans authentification (`auth: false`). L’expéditeur doit être autorisé par votre serveur SMTP.
+
+Renseigner les deux variables ajoutées à `.env` :
+
+```dotenv
+SMTP_USERNAME=identifiant_smtp
+SMTP_PASSWORD=mot_de_passe_smtp
+```
+
+Compose transmet uniquement ces deux variables au service mail. Le module lancé directement en Python attend ces variables dans son environnement ; il ne charge pas `.env` lui-même.
 
 ```bash
-sudo docker compose build embeddings
-sudo docker compose run --rm -e BRIEFING_DRY_RUN=1 embeddings python -m embeddings.briefing
+docker compose --profile mail build mailer
+# Génère output/briefing-email.html sans connexion SMTP ni envoi.
+docker compose --profile mail run --rm -T mailer --dry-run
+# Envoie le briefing au destinataire configuré.
+docker compose --profile mail run --rm -T mailer
 ```
 
-Le DRY RUN utilise Qwen pour l'évaluation mais ne publie rien.
+L’aperçu ne nécessite pas d’identifiants SMTP. Chaque exécution sans `--dry-run` envoie un nouveau mail ; il n’y a pas de déduplication des envois. Le script `run-daily.sh` envoie le mail après la génération et la vérification du Markdown, avant les étapes audio et podcast. Un échec d’envoi arrête le pipeline. Construire l’image `mailer` et renseigner la configuration SMTP avant le prochain lancement quotidien.
+
+## Configuration utile
+
+| Fichier | Rôle |
+|---|---|
+| `config/sources.yaml` | Catalogue RSS/Atom et activation des sources |
+| `config/scoring.yaml` | Mots-clés et pondérations du score historique |
+| `config/briefing.yaml` | Fenêtre, sélection, Qwen et bonus métier du scorer |
+| `config/watchlists.yaml` | Inclusion, exclusion et technologies suivies |
+| `config/semantic_scoring.yaml` | Descriptions des domaines pour MiniLM |
+| `config/glossary.yaml` | Termes protégés pendant la traduction |
+| `config/audio.yaml` | Moteur, voix et paramètres MP3 |
+| `config/podcast.yaml` | Métadonnées publiques, SFTP et rétention |
+| `config/mail.yaml` | Destinataire, expéditeur, objet et paramètres SMTP |
+
+Paramètres actuels du briefing : fenêtre de 24 heures, score minimum 35, plafond global de 15 événements, cible de 50 candidats Qwen, jusqu’à 8 arbitrages de déduplication. La sélection ordinaire exige une pertinence technique d’au moins 2/5 et une importance d’au moins `min_strategic_importance` (2 actuellement). La pertinence métier sert au classement ; les seuils `min_business_relevance` et `min_security_business_relevance` ne sont pas appliqués par la sélection actuelle.
+
+Les fichiers de configuration du briefing sont montés depuis l’hôte. Ceux du collecteur et du scorer sont copiés à la construction : reconstruire `collector` après modification. Le contexte métier du prompt Qwen reste écrit dans `embeddings/briefing.py` ; modifier le YAML ne le remplace pas.
+
+## Diagnostic et automatisation
+
+```bash
+# État et journaux des services persistants
+docker compose --profile ai ps
+docker compose logs --tail=100 postgres ollama
+docker stats --no-stream
+
+# Analyse facultative des similarités (aucune écriture en base)
+docker compose --profile ai run --rm -T embeddings python -m embeddings.worker
+
+# Statut des collectes
+docker compose exec -T postgres sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT status, COUNT(*) FROM collection_runs GROUP BY status;"'
+```
+
+`run-daily.sh` enchaîne infrastructure, collecte, diagnostic MiniLM, briefing, envoi du mail, audio et publication. **Il omet actuellement `app.scorer`** : ajouter l’étape de scoring après la collecte avant de l’utiliser comme pipeline complet. Son verrou `/run/ai-news.lock` exige les permissions adaptées. Aucune planification cron/systemd n’est livrée.
+
+Autres limites à garder en tête : les articles sans date de publication sont exclus du briefing ; la vue SQL déduplique uniquement par GUID ; les évaluations Qwen sont répétées à chaque exécution. Les résumés et priorités produits par les modèles demandent une vérification des sources avant une décision opérationnelle.
+
+Documentation vérifiée par lecture du code. L’exécution complète PostgreSQL/Ollama/traduction/audio/SFTP n’a pas été relancée pour cette revue.

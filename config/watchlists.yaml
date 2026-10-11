@@ -3,7 +3,7 @@
 # Example only: do not overwrite your existing watchlists.yaml
 whitelist:
   - name: Technologies suivies
-    keywords: [Elasticsearch, Elastic Security, VMware, Microsoft 365]
+    keywords: [Ubuntu, Rocky Linux, Windows 11, Fortigate, Dealinea, GLPI, EspoCRM, ESX, Microsoft 365]
     scope: title_summary
     priority: high
   - name: IA stratégique
