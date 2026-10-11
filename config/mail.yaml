@@ -1,0 +1,11 @@
+input: /output/briefing.md
+sender: "AI News <ai-news@chauchard.info>"
+recipient: chauchse@gmail.com
+subject: "AI News — Briefing du {date}"
+smtp:
+  host: ssl0.ovh.net
+  port: 587
+  security: starttls  # starttls (587), ssl (465), none (relais local sans auth)
+  auth: true
+  timeout: 30
+# Identifiants exclusivement dans .env : SMTP_USERNAME et SMTP_PASSWORD.

@@ -36,9 +36,12 @@ services:
       HF_HOME: /models
       OMP_NUM_THREADS: "4"
       BRIEFING_CONFIG: /config/briefing.yaml
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: qwen2.5:3b
     volumes:
       - embeddings_models:/models
       - ./config:/config:ro
+      - ./output:/output
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,14 +60,72 @@ services:
       OLLAMA_NUM_PARALLEL: "1"
       OLLAMA_MAX_LOADED_MODELS: "1"
       OLLAMA_KEEP_ALIVE: "0"
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      HF_HOME: /models
-      OMP_NUM_THREADS: "4"
-      OLLAMA_URL: http://ollama:11434
-      OLLAMA_MODEL: qwen2.5:3b
     volumes:
       - ollama_models:/root/.ollama
     mem_limit: 4g
+
+  audio:
+    profiles: [ai]
+    build:
+      context: .
+      dockerfile: audio/Dockerfile
+    command: ["--config", "/config/audio.yaml"]
+    environment:
+      TZ: Europe/Paris
+    volumes:
+      - ./config:/config:ro
+      - ./audio/models:/models:ro
+      - ./audio/voices:/voices:ro
+      - ./output:/output
+    mem_limit: 2g
+
+  xtts:
+    profiles: [xtts]
+    build:
+      context: .
+      dockerfile: audio/xtts/Dockerfile
+    environment:
+      TZ: Europe/Paris
+      TTS_HOME: /models
+      OMP_NUM_THREADS: "4"
+    volumes:
+      - ./config:/config:ro
+      - ./audio/models/xtts:/models
+      - ./audio/voices:/voices:ro
+      - ./output:/output
+    mem_limit: 6g
+    command: ["--config", "/config/audio.yaml"]
+
+  podcast:
+    build:
+      context: .
+      dockerfile: podcast/Dockerfile
+    profiles: [ai]
+    env_file:
+      - .env
+    environment:
+      TZ: Europe/Paris
+    volumes:
+      - ./config:/config:ro
+      - ./output:/output:ro
+      - ./podcast/cover.jpg:/podcast/cover.jpg:ro
+      - ./podcast/state:/state
+      - /home/seb/.ssh/known_hosts:/root/.ssh/known_hosts:ro
+    mem_limit: 256m
+
+  mailer:
+    profiles: [mail]
+    build:
+      context: .
+      dockerfile: mailer/Dockerfile
+    environment:
+      TZ: Europe/Paris
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    volumes:
+      - ./config:/config:ro
+      - ./output:/output
+    mem_limit: 256m
 
 volumes:
   postgres_data:

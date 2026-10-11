@@ -73,7 +73,7 @@ sources:
 - name: BleepingComputer
   url: https://www.bleepingcomputer.com/feed/
   category: Securité
-  enabled: true
+  enabled: false
 - name: darkreading
   url: https://www.darkreading.com/rss_simple.asp
   category: Securité
@@ -101,7 +101,7 @@ sources:
 - name: Sophos Blogs
   url: http://blogs.sophos.com/feed/
   category: Securité
-  enabled: true
+  enabled: false
 - name: Control Manager RSS
   url: http://downloadcenter.trendmicro.com/pull/feed/product/7?region=NABU
   category: Securité
@@ -129,7 +129,7 @@ sources:
 - name: Security Labs – Qualys Blog
   url: https://community.qualys.com/blogs/securitylabs/feeds/posts
   category: Securité
-  enabled: true
+  enabled: false
 - name: Information Security
   url: http://www.information-security.fr/feed/
   category: Securité
@@ -141,7 +141,7 @@ sources:
 - name: CERT-FR
   url: http://www.cert.ssi.gouv.fr/site/cert-fr_alerte.rss
   category: Securité
-  enabled: true
+  enabled: false
 - name: RSS - Actualités CNIL
   url: http://www.cnil.fr/rss-cnil/
   category: Securité
@@ -213,7 +213,7 @@ sources:
 - name: Channelnews.fr - l'actualité du business de l'informatique et des télécoms
   url: http://www.channelnews.fr/index.php?format=feed&type=rss
   category: Actu societé IT
-  enabled: true
+  enabled: false
 - name: Azure Status
   url: https://azurestatuscdn.azureedge.net/en-us/status/feed/
   category: Actu societé IT
@@ -274,3 +274,187 @@ sources:
   url: https://www.presse-citron.net/feed/
   category: Actu societé IT
   enabled: true
+# ==========================================
+# INTELLIGENCE ARTIFICIELLE
+# ==========================================
+
+# Actualités des principaux acteurs IA
+
+- name: "AI - Anthropic News"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/anthropic-news.xml"
+  enabled: true
+
+- name: "AI - Anthropic Research"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/anthropic-research.xml"
+  enabled: true
+
+- name: "AI - Mistral News"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/mistral-news.xml"
+  enabled: true
+
+- name: "AI - Cohere Blog"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/cohere-blog.xml"
+  enabled: true
+
+- name: "AI - xAI News"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/spacex-ai-news.xml"
+  enabled: true
+
+- name: "AI - Ai2 News"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/allenai-news.xml"
+  enabled: true
+
+# Analyses, tendances et veille générale
+
+- name: "AI - The Batch"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/the-batch.xml"
+  enabled: true
+
+- name: "AI - TLDR AI"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/tldr-ai.xml"
+  enabled: true
+
+- name: "AI - Turing Blog"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/turing-blog.xml"
+  enabled: true
+
+# Recherche et sécurité de l'IA
+
+- name: "AI - AISI Blog"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/aisi-blog.xml"
+  enabled: true
+
+- name: "AI - CETaS Analysis"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/cetas-analysis.xml"
+  enabled: true
+
+- name: "AI - Mila News"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/mila-news.xml"
+  enabled: true
+
+# Sources secondaires : désactivées initialement
+
+- name: "AI - Aggregated News"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/ai-rss-feeds-news.xml"
+  enabled: false
+
+- name: "AI - Claude News"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/claude-news.xml"
+  enabled: false
+
+- name: "AI - Cosine Blog"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/cosine-blog.xml"
+  enabled: false
+
+- name: "AI - CETaS Research"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/cetas-research.xml"
+  enabled: false
+
+- name: "AI - Turing News"
+  url: "https://raw.githubusercontent.com/alan-turing-institute/ai-rss-feeds/refs/heads/main/feeds/turing-news.xml"
+  enabled: false
+# ==========================================
+# TECHNOLOGIE / IT / INFRASTRUCTURE
+# ==========================================
+
+# Actualité technologique et informatique
+
+- name: "IT - Ars Technica"
+  url: "https://feeds.arstechnica.com/arstechnica/index"
+  enabled: true
+
+- name: "IT - Hacker News"
+  url: "https://news.ycombinator.com/rss"
+  enabled: true
+
+- name: "IT - TechCrunch"
+  url: "https://feeds.feedburner.com/TechCrunch"
+  enabled: true
+
+- name: "IT - The Register"
+  url: "https://www.theregister.com/headlines.atom"
+  enabled: true
+
+- name: "IT - Slashdot"
+  url: "https://rss.slashdot.org/Slashdot/slashdotMain"
+  enabled: true
+
+# Stratégie technologique et transformation
+
+- name: "IT - Stratechery"
+  url: "https://stratechery.com/feed/"
+  enabled: true
+
+- name: "IT - The Next Web"
+  url: "https://thenextweb.com/feed/"
+  enabled: true
+
+- name: "IT - ReadWrite"
+  url: "https://readwrite.com/feed/"
+  enabled: true
+
+# Écosystème et tendances des grands acteurs
+
+- name: "IT - Google The Keyword"
+  url: "https://blog.google/rss/"
+  enabled: true
+
+- name: "IT - The Verge"
+  url: "https://www.theverge.com/rss/index.xml"
+  enabled: true
+
+- name: "IT - Engadget"
+  url: "https://www.engadget.com/rss.xml"
+  enabled: false
+
+# ==========================================
+# SOURCES SECONDAIRES
+# ==========================================
+
+- name: "IT - CNET News"
+  url: "https://www.cnet.com/rss/news/"
+  enabled: false
+
+- name: "IT - Gizmodo"
+  url: "https://gizmodo.com/rss"
+  enabled: false
+
+- name: "IT - Lifehacker"
+  url: "https://lifehacker.com/rss"
+  enabled: false
+
+- name: "IT - Mashable"
+  url: "https://feeds.mashable.com/Mashable"
+  enabled: false
+
+# ==========================================
+# PODCASTS / AUDIO
+# ==========================================
+
+- name: "IT - Accidental Tech Podcast"
+  url: "https://atp.fm/rss"
+  enabled: false
+
+- name: "IT - Analog(ue)"
+  url: "https://www.relay.fm/analogue/feed"
+  enabled: false
+
+- name: "IT - Clockwise"
+  url: "https://www.relay.fm/clockwise/feed"
+  enabled: false
+
+- name: "IT - Reply All"
+  url: "https://feeds.megaphone.fm/replyall"
+  enabled: false
+
+- name: "IT - Rocket"
+  url: "https://www.relay.fm/rocket/feed"
+  enabled: false
+
+- name: "IT - The Vergecast"
+  url: "https://feeds.megaphone.fm/vergecast"
+  enabled: false
+
+- name: "IT - This Week in Tech"
+  url: "https://feeds.twit.tv/twit.xml"
+  enabled: false

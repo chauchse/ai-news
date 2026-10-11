@@ -1,0 +1,21 @@
+# Configuration audio AI News V56
+input: /output/briefing.md
+output: /output/briefing.mp3
+engine: kokoro 
+# piper | kokoro | xtts
+language: fr
+voices:
+  piper:
+    fr: /models/fr_FR-tom-medium.onnx
+    en: /models/en_US-lessac-high.onnx
+  kokoro:
+    fr: ff_siwis
+    en: af_heart
+  xtts:
+    fr: homme_fr
+    en: homme_fr
+# Pour XTTS, possibilité de remplacer la voix par un fichier WAV
+xtts_speaker_wav: /voices/homme_fr.wav
+pause_ms: 1200
+title_pause_ms: 600
+bitrate: 32k

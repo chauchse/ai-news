@@ -6,3 +6,5 @@ output/
 audio/models/
 config/watchlist.yaml
 *.log
+
+podcast/state/
