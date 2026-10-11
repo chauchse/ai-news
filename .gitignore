@@ -8,3 +8,5 @@ config/watchlist.yaml
 *.log
 
 podcast/state/
+
+podcast/known_hosts

@@ -29,6 +29,35 @@ Le regroupement du briefing est autonome. `embeddings.worker` est un outil de di
 
 Toutes les commandes partent de la racine du dépôt. Docker et Docker Compose avec profils sont nécessaires ; ajouter `sudo` devant `docker` si votre compte l’exige.
 
+### Initialisation automatique (recommandée)
+
+Installer Docker avec le plugin Compose v2 et `curl`, puis depuis le dépôt cloné :
+
+```bash
+./init-repo.sh
+```
+
+Le script crée `output/`, `podcast/state/`, `audio/voices/` et les dossiers de modèles. Si `.env` est absent, il le crée avec un mot de passe PostgreSQL aléatoire. Il télécharge Kokoro et les voix FR/EN, construit les images (mailer inclus), démarre PostgreSQL et Ollama, applique les scripts SQL et télécharge Qwen, MiniLM et MarianMT. MiniLM et MarianMT sont conservés dans le volume `embeddings_models`, Qwen dans `ollama_models`.
+
+Internet et plusieurs Go de disque sont nécessaires. Le script s’arrête à la première erreur et peut être relancé : les modèles audio non vides déjà présents et le `.env` existant sont conservés. Ne pas changer le mot de passe d’un PostgreSQL déjà initialisé en modifiant seulement `.env`.
+
+```bash
+# Télécharger seulement Kokoro, sans Docker ni initialisation SQL
+./init-repo.sh --models-only
+# Initialisation complète avec les voix Piper FR/EN configurées
+./init-repo.sh --with-piper
+# Télécharger seulement Kokoro et Piper
+./init-repo.sh --models-only --with-piper
+```
+
+Sources : [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M/tree/main) et [Piper voices](https://huggingface.co/rhasspy/piper-voices/tree/main). Le script contient les commandes `curl` de téléchargement. Ajouter manuellement toute voix personnalisée et adapter `config/audio.yaml`.
+
+Aucune collecte, aucun mail et aucune publication ne sont lancés. Compléter les configurations SMTP/SFTP et `.env` avant le pipeline quotidien. Le fichier `podcast/known_hosts` est créé vide : ajouter la clé vérifiée du serveur avant publication. Pour utiliser un fichier existant, définir `PODCAST_KNOWN_HOSTS=/chemin/absolu/known_hosts` dans `.env`.
+
+XTTS reste optionnel : construire le service dédié et lancer la commande décrite plus bas pour télécharger son modèle. Fournir aussi `audio/voices/homme_fr.wav` ; aucune voix de référence n’est générée par le script.
+
+Les étapes suivantes détaillent l’installation manuelle.
+
 ### 1. Préparer la configuration
 
 ```bash
@@ -141,7 +170,7 @@ audio/models/kokoro/kokoro-v1_0.pth
 audio/models/kokoro/voices/ff_siwis.pt
 ```
 
-Ils sont montés dans `/models`. Les modèles présents sont actuellement suivis par Git malgré la règle de `.gitignore`. Le conteneur audio est configuré en mode Hugging Face hors ligne.
+Ils sont montés dans `/models`. Les modèles sont exclus de Git ; les télécharger avec `./init-repo.sh --models-only`. Le conteneur audio est configuré en mode Hugging Face hors ligne.
 
 ```bash
 docker compose --profile ai run --rm -T audio
@@ -170,7 +199,7 @@ Repasser `engine: kokoro` pour le script quotidien, qui impose ce moteur. La gé
 
 ### 6. Préparer et publier le podcast (optionnel)
 
-Adapter `config/podcast.yaml` : URL publique, métadonnées, destination SFTP et rétention. Fournir `podcast/cover.jpg` et les identifiants dans `.env`. La clé du serveur doit être vérifiée et présente dans le fichier `known_hosts` monté par Compose ; son chemin hôte actuel est `/home/seb/.ssh/known_hosts`.
+Adapter `config/podcast.yaml` : URL publique, métadonnées, destination SFTP et rétention. Fournir `podcast/cover.jpg` et les identifiants dans `.env`. La clé du serveur doit être vérifiée et présente dans le fichier `known_hosts` monté par Compose ; son chemin hôte par défaut est `./podcast/known_hosts`, configurable via `PODCAST_KNOWN_HOSTS` dans `.env`.
 
 Utiliser une illustration JPEG carrée, idéalement 3 000 × 3 000 pixels en RGB. Vérifier `sftp.remote_path` depuis la session SFTP. L’adresse `podcast.email` apparaît publiquement dans le RSS : choisir une adresse de contact adaptée.
 
