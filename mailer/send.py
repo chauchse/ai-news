@@ -28,7 +28,8 @@ def load_config(path):
     if not isinstance(cfg, dict) or not isinstance(cfg.get('smtp'), dict):
         raise ValueError('Configuration mail invalide : section smtp attendue')
     for key in ('sender', 'recipient'):
-        address(cfg.get(key))
+        cfg[key] = os.environ.get(key.upper()) or cfg.get(key)
+        address(cfg[key])
     smtp = cfg['smtp']
     if not isinstance(smtp.get('host'), str) or not smtp['host'].strip():
         raise ValueError('smtp.host obligatoire')
@@ -45,7 +46,7 @@ def load_config(path):
     return cfg
 
 
-def render_html(text):
+def render_html(text, language="fr"):
     body = markdown.markdown(text, extensions=['tables', 'fenced_code'])
     body = bleach.clean(
         body,
@@ -55,7 +56,7 @@ def render_html(text):
         attributes={'a': ['href', 'title']}, protocols=['https', 'http', 'mailto'],
         strip=True,
     )
-    return ('<!doctype html><html lang="fr"><head><meta charset="utf-8">'
+    return (f'<!doctype html><html lang="{language}"><head><meta charset="utf-8">'
             '<title>AI News</title></head><body style="margin:0;padding:24px;'
             'background:#f3f4f6;color:#172033;font-family:Arial,sans-serif;line-height:1.6">'
             '<div style="max-width:760px;margin:auto;padding:24px;background:white">'
@@ -70,12 +71,12 @@ def build_message(cfg):
     subject = str(cfg.get('subject', 'AI News — Briefing du {date}')).replace('{date}', today)
     msg = EmailMessage()
     msg['Subject'] = subject
-    msg['From'] = cfg['sender']
-    msg['To'] = cfg['recipient']
+    msg['From'] = address(os.environ.get('SENDER') or cfg['sender'])
+    msg['To'] = address(os.environ.get('RECIPIENT') or cfg['recipient'])
     msg['Date'] = formatdate(localtime=True)
     msg['Message-ID'] = make_msgid()
     msg.set_content(text)
-    msg.add_alternative(render_html(text), subtype='html')
+    msg.add_alternative(render_html(text, cfg.get("language", "fr")), subtype='html')
     return msg
 
 
@@ -107,22 +108,44 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', default='/config/mail.yaml')
     parser.add_argument('--dry-run', action='store_true', help='Créer un aperçu HTML sans connexion SMTP')
-    parser.add_argument('--preview', default='/output/briefing-email.html')
+    parser.add_argument('--preview', help='Chemin HTML personnalisé ; sinon briefing-email-<langue>.html')
+    parser.add_argument('--language', choices=['en', 'fr'])
+    parser.add_argument('--input')
     args = parser.parse_args()
+    stage = "configuration (YAML, SENDER, RECIPIENT)"
     try:
         cfg = load_config(args.config)
+        if args.language:
+            cfg.update(cfg.get('editions', {}).get(args.language, {}))
+            cfg['language'] = args.language
+            cfg.setdefault('subject', 'AI News — {date}')
+            cfg['subject'] = f"[{args.language.upper()}] " + cfg['subject']
+        if args.input:
+            cfg['input'] = args.input
+        stage = "lecture du Markdown et préparation du message"
         message = build_message(cfg)
+        stage = "écriture de l’aperçu HTML"
+        language_suffix = f"-{args.language}" if args.language else ""
+        default_preview = (Path(args.input).with_name('briefing-email.html') if args.input
+                           else Path(f"/output/briefing-email{language_suffix}.html"))
+        output = Path(args.preview) if args.preview else default_preview
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(message.get_body(preferencelist=('html',)).get_content(), encoding='utf-8')
         if args.dry_run:
-            output = Path(args.preview)
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(message.get_body(preferencelist=('html',)).get_content(), encoding='utf-8')
             print(f'Aperçu HTML : {output} ; aucun mail envoyé')
         else:
+            stage = "connexion, authentification ou envoi SMTP"
             send_message(cfg, message)
             print('Mail accepté par le serveur SMTP')
-    except (OSError, ValueError, smtplib.SMTPException, yaml.YAMLError, RuntimeError):
-        # Avoid printing SMTP responses, which may contain credentials or message content.
-        parser.exit(1, 'Échec de l’envoi ou de la préparation : vérifier le fichier Markdown, la configuration et l’accès SMTP.\n')
+    except (OSError, ValueError, smtplib.SMTPException, yaml.YAMLError, RuntimeError) as exc:
+        # Only report the stage/type/code, never SMTP responses or credentials.
+        detail = type(exc).__name__
+        if isinstance(exc, smtplib.SMTPAuthenticationError):
+            detail += " : authentification refusée"
+        if isinstance(exc, smtplib.SMTPResponseException):
+            detail += f" (code SMTP {exc.smtp_code})"
+        parser.exit(1, f"Échec à l’étape {stage} — {detail}.\n")
+
 
 
 if __name__ == '__main__':

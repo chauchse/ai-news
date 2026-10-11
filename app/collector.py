@@ -6,6 +6,7 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 from app.normalizer import normalize_text
 import urllib.request
+from app.source_health import consecutive_failures, disable_source
 
 import feedparser
 import psycopg
@@ -81,6 +82,7 @@ def purge_disabled_sources(conn, config):
                 continue
 
             source_id = row[0]
+            cur.execute("UPDATE sources SET enabled = FALSE WHERE id = %s", (source_id,))
 
             cur.execute(
                 "SELECT COUNT(*) FROM articles WHERE source_id = %s",
@@ -105,6 +107,11 @@ def main():
     with open(CONFIG_PATH, encoding="utf-8") as f:
         config = yaml.safe_load(f) or {}
 
+    policy = config.get('source_health', {})
+    threshold = int(policy.get('consecutive_failures', 3))
+    if threshold < 1:
+        raise ValueError('source_health.consecutive_failures doit être positif')
+    auto_disable = policy.get('auto_disable', True)
     with psycopg.connect(DATABASE_URL) as conn:
         purge_disabled_sources(conn, config)
         for source in config.get("sources", []):
@@ -115,6 +122,7 @@ def main():
             name = source["name"]
             feed_url = source["url"]
             run_id = None
+            feed_failure = False
 
             try:
                 with conn.cursor() as cur:
@@ -123,7 +131,7 @@ def main():
                         INSERT INTO sources (name, feed_url)
                         VALUES (%s, %s)
                         ON CONFLICT (feed_url)
-                        DO UPDATE SET name = EXCLUDED.name
+                        DO UPDATE SET name = EXCLUDED.name, enabled = TRUE
                         RETURNING id
                         """,
                         (name, feed_url),
@@ -140,6 +148,7 @@ def main():
                     )
                     run_id = cur.fetchone()[0]
 
+                feed_failure = True
                 # Request the feed with a timeout; do not trust feed contents.
                 request = urllib.request.Request(
                     feed_url,
@@ -170,6 +179,7 @@ def main():
                         f"Flux RSS invalide : {feed.get('bozo_exception')}"
                     )
 
+                feed_failure = False
                 found = 0
                 inserted = 0
 
@@ -255,7 +265,7 @@ def main():
                             INSERT INTO sources (name, feed_url)
                             VALUES (%s, %s)
                             ON CONFLICT (feed_url)
-                            DO UPDATE SET name = EXCLUDED.name
+                            DO UPDATE SET name = EXCLUDED.name, enabled = TRUE
                             RETURNING id
                             """,
                             (name, feed_url),
@@ -268,9 +278,15 @@ def main():
                                 (source_id, finished_at, status, error_message)
                             VALUES (%s, NOW(), 'failed', %s)
                             """,
-                            (source_id, str(exc)[:4000]),
+                            (source_id, ('[feed] ' if feed_failure else '[internal] ') + str(exc)[:3980]),
                         )
                     conn.commit()
+                    if feed_failure and auto_disable and consecutive_failures(conn, source_id, threshold):
+                        # Persist YAML first; a failed write must not silently retire the source in DB.
+                        disable_source(CONFIG_PATH, feed_url)
+                        source['enabled'] = False
+                        purge_disabled_sources(conn, {'sources': [source]})
+                        log.warning('Source désactivée après %d échecs consécutifs : %s', threshold, name)
 
                 except Exception:
                     conn.rollback()

@@ -14,13 +14,10 @@ RUN pip install --no-cache-dir \
     'torchaudio==2.5.1' \
     --index-url https://download.pytorch.org/whl/cpu
 
-RUN pip install --no-cache-dir \
-    'piper-tts==1.3.0' \
-    'PyYAML>=6,<7' \
-    'kokoro==0.9.4' \
-    'misaki[en,fr]>=0.9.4,<1' \
-    'soundfile>=0.12' \
-    'transformers==4.46.3'
+COPY audio/requirements.txt /tmp/audio-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/audio-requirements.txt && \
+    python -c "import spacy; assert spacy.util.is_package('en_core_web_sm'); spacy.load('en_core_web_sm', enable=['tok2vec', 'tagger'])" && \
+    pip check
 
 WORKDIR /app
 

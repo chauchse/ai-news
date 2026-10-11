@@ -1,6 +1,11 @@
 # Flux RSS/Atom exportés depuis Feedly (OPML).
 # Les URL sont conservées telles qu'exportées ; certains flux anciens
 # pourront nécessiter une vérification ultérieure.
+# Désactivation automatique après plusieurs collectes en échec.
+source_health:
+  auto_disable: true
+  consecutive_failures: 3
+
 sources:
 - name: Schneier on Security
   url: http://www.schneier.com/blog/index.rdf

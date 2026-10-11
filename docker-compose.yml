@@ -23,6 +23,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SOURCES_FILE: /app/config/sources.yaml
+    volumes:
+      - ./config:/app/config
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,7 +109,7 @@ services:
       TZ: Europe/Paris
     volumes:
       - ./config:/config:ro
-      - ./output:/output:ro
+      - ./output:/output
       - ./podcast/cover.jpg:/podcast/cover.jpg:ro
       - ./podcast/state:/state
       - /home/seb/.ssh/known_hosts:/root/.ssh/known_hosts:ro
@@ -120,6 +122,8 @@ services:
       dockerfile: mailer/Dockerfile
     environment:
       TZ: Europe/Paris
+      SENDER: ${SENDER:-}
+      RECIPIENT: ${RECIPIENT:-}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     volumes:

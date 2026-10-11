@@ -4,3 +4,4 @@ langdetect==1.0.9
 PyYAML>=6.0,<7.0
 transformers>=4.40,<5.0
 sentencepiece>=0.2,<1.0
+sacremoses>=0.1,<0.2
