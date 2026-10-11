@@ -9,7 +9,7 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from audio.tts import extract
+from audio.tts import extract, check_english_dependencies
 from mailer.send import render_html
 from podcast.publish import parse_articles, episode_description
 
@@ -24,6 +24,16 @@ def briefing_functions():
 
 
 class BilingualTests(unittest.TestCase):
+    def test_missing_spacy_model_stops_before_runtime_install(self):
+        spacy = Mock()
+        with patch.dict('sys.modules', {'spacy': spacy}):
+            spacy.util.is_package.return_value = False
+            with self.assertRaisesRegex(RuntimeError, 'Reconstruire'):
+                check_english_dependencies()
+            spacy.cli.download.assert_not_called()
+            spacy.util.is_package.return_value = True
+            check_english_dependencies()
+
     def test_french_generated_content_is_corrected_without_changing_english_field(self):
         ns = briefing_functions()
         content = {'title': 'Google Home Speaker avec Gemini Intelligence Artificielle Testé et Pris',

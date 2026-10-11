@@ -53,6 +53,15 @@ def silence(path, ms, rate):
         f.writeframes(b'\0\0' * int(rate * ms / 1000))
 
 
+def check_english_dependencies():
+    import spacy
+    if not spacy.util.is_package('en_core_web_sm'):
+        raise RuntimeError(
+            'Modèle spaCy anglais absent de l’image audio. '
+            'Reconstruire avec : sudo docker compose --profile ai build --no-cache audio. '
+            'Aucune installation pip ne sera effectuée pendant la génération.')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default='/config/audio.yml')
@@ -96,6 +105,8 @@ def main():
             run(['piper', '--model', voice, '--output_file', str(path)], input_text=text + '\n')
 
     elif engine == 'kokoro':
+        if language == 'en':
+            check_english_dependencies()
         import numpy as np
         import soundfile as sf
         from kokoro import KModel, KPipeline

@@ -16,8 +16,7 @@ RUN pip install --no-cache-dir \
 
 COPY audio/requirements.txt /tmp/audio-requirements.txt
 RUN pip install --no-cache-dir -r /tmp/audio-requirements.txt && \
-    python -m spacy download en_core_web_sm && \
-    python -c "import spacy; spacy.load('en_core_web_sm', enable=['tok2vec', 'tagger'])" && \
+    python -c "import spacy; assert spacy.util.is_package('en_core_web_sm'); spacy.load('en_core_web_sm', enable=['tok2vec', 'tagger'])" && \
     pip check
 
 WORKDIR /app
