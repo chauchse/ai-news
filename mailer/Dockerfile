@@ -5,3 +5,5 @@ COPY mailer/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY mailer/send.py /app/send.py
 ENTRYPOINT ["python", "/app/send.py"]
+
+COPY project_config.py /app/project_config.py

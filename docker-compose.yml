@@ -22,9 +22,9 @@ services:
       context: .
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      SOURCES_FILE: /app/config/sources.yaml
+      AI_NEWS_CONFIG: /workspace/config.yaml
     volumes:
-      - ./config:/app/config
+      - ./:/workspace
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,12 +37,12 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       HF_HOME: /models
       OMP_NUM_THREADS: "4"
-      BRIEFING_CONFIG: /config/briefing.yaml
+      AI_NEWS_CONFIG: /app/config.yaml
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: qwen2.5:3b
     volumes:
       - embeddings_models:/models
-      - ./config:/config:ro
+      - ./config.yaml:/app/config.yaml:ro
       - ./output:/output
     depends_on:
       postgres:
@@ -71,11 +71,11 @@ services:
     build:
       context: .
       dockerfile: audio/Dockerfile
-    command: ["--config", "/config/audio.yaml"]
+    command: ["--config", "/app/config.yaml"]
     environment:
       TZ: Europe/Paris
     volumes:
-      - ./config:/config:ro
+      - ./config.yaml:/app/config.yaml:ro
       - ./audio/models:/models:ro
       - ./audio/voices:/voices:ro
       - ./output:/output
@@ -91,12 +91,12 @@ services:
       TTS_HOME: /models
       OMP_NUM_THREADS: "4"
     volumes:
-      - ./config:/config:ro
+      - ./config.yaml:/app/config.yaml:ro
       - ./audio/models/xtts:/models
       - ./audio/voices:/voices:ro
       - ./output:/output
     mem_limit: 6g
-    command: ["--config", "/config/audio.yaml"]
+    command: ["--config", "/app/config.yaml"]
 
   podcast:
     build:
@@ -108,7 +108,7 @@ services:
     environment:
       TZ: Europe/Paris
     volumes:
-      - ./config:/config:ro
+      - ./config.yaml:/app/config.yaml:ro
       - ./output:/output
       - ./podcast/cover.jpg:/podcast/cover.jpg:ro
       - ./podcast/state:/state
@@ -127,7 +127,7 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     volumes:
-      - ./config:/config:ro
+      - ./config.yaml:/app/config.yaml:ro
       - ./output:/output
     mem_limit: 256m
 

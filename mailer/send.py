@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import bleach
 import markdown
 import yaml
+from project_config import load_section
 
 
 def address(value):
@@ -23,8 +24,8 @@ def address(value):
     return value
 
 
-def load_config(path):
-    cfg = yaml.safe_load(Path(path).read_text(encoding='utf-8'))
+def load_config(path=None):
+    cfg = load_section('mail', path)
     if not isinstance(cfg, dict) or not isinstance(cfg.get('smtp'), dict):
         raise ValueError('Configuration mail invalide : section smtp attendue')
     for key in ('sender', 'recipient'):
@@ -106,7 +107,7 @@ def send_message(cfg, message):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', default='/config/mail.yaml')
+    parser.add_argument('--config', help='Configuration globale ; défaut : config.yaml / AI_NEWS_CONFIG')
     parser.add_argument('--dry-run', action='store_true', help='Créer un aperçu HTML sans connexion SMTP')
     parser.add_argument('--preview', help='Chemin HTML personnalisé ; sinon briefing-email-<langue>.html')
     parser.add_argument('--language', choices=['en', 'fr'])

@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 import paramiko
-import yaml
+from project_config import load_section
 
 LOG = logging.getLogger('podcast')
 ITUNES = 'http://www.itunes.com/dtds/podcast-1.0.dtd'
@@ -32,8 +32,8 @@ SOURCE_RE = re.compile(r'^\s*(?:[-*]\s*)?(?:\*\*)?Sources?\s*(?:\*\*)?\s*:\s*(?:
 MD_LINK_RE = re.compile(r'\[([^\]]+)\]\((https?://[^)\s]+)(?:\s+[^)]*)?\)')
 
 
-def config_load(path):
-    data = yaml.safe_load(Path(path).read_text(encoding='utf-8')) or {}
+def config_load(path=None):
+    data = load_section('podcast', path)
     if not isinstance(data, dict):
         raise ValueError('Podcast config must be a YAML mapping')
     sftp = data.setdefault('sftp', {})
@@ -250,7 +250,7 @@ def atomic_upload(sftp, local, remote):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='/config/podcast.yaml')
+    parser.add_argument('--config', help='Configuration globale ; défaut : config.yaml / AI_NEWS_CONFIG')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--language', choices=['en', 'fr'])
     parser.add_argument('--date', help='Edition date, YYYY-MM-DD')

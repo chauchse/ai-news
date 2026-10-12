@@ -15,6 +15,16 @@ flock -n 9 || { echo 'Pipeline déjà en cours'; exit 1; }
 export TZ=Europe/Paris
 COMPOSE=(docker compose --profile ai --profile mail)
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+# Refuser les anciennes images avant toute collecte, synthèse ou envoi.
+for service in collector embeddings audio podcast mailer; do
+    if ! "${COMPOSE[@]}" run --rm -T --no-deps --entrypoint python "$service" \
+        -c 'from project_config import load_section; load_section("audio")'; then
+        log 'Images incompatibles : reconstruire collector embeddings audio podcast mailer avant le lancement'
+        exit 1
+    fi
+done
+ENGINE=$("${COMPOSE[@]}" run --rm -T --no-deps --entrypoint python audio -m project_config audio engine)
+[[ "$ENGINE" == kokoro ]] || { log 'Le pipeline quotidien exige Kokoro'; exit 1; }
 TODAY=$(date +%F)
 STATE="output/daily/$TODAY"
 mkdir -p "$STATE/en" "$STATE/fr"
@@ -53,9 +63,6 @@ if [[ ! -f "$STATE/generated" ]]; then
     done
     touch "$STATE/generated"
 fi
-ENGINE=$(awk '/^[[:space:]]*engine[[:space:]]*:/ {print $2; exit}' config/audio.yaml)
-[[ "$ENGINE" == kokoro ]] || { log 'Le pipeline quotidien exige Kokoro'; exit 1; }
-
 for language in en fr; do
     log "Édition $language"
     edition="$STATE/$language"
@@ -69,7 +76,7 @@ for language in en fr; do
             --input "$container_dir/briefing.md" --preview "$container_dir/briefing-email.html" --dry-run
     fi
     if [[ ! -f "$edition/audio.done" || ! -s "$edition/$TODAY-briefing.mp3" ]]; then
-        "${COMPOSE[@]}" run --rm -T audio --config /config/audio.yaml \
+        "${COMPOSE[@]}" run --rm -T audio --config /app/config.yaml \
             --language "$language" --input "$container_dir/briefing.md" \
             --output "$container_dir/briefing.mp3" --date "$TODAY"
         test -s "$edition/$TODAY-briefing.mp3"

@@ -19,12 +19,13 @@ def consecutive_failures(conn, source_id, threshold):
 
 def disable_source(path, url):
     path = Path(path)
-    with path.with_name('.sources.lock').open('a') as lock:
+    with path.with_name('.config.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         yaml = YAML()
         yaml.preserve_quotes = True
         data = yaml.load(path)
-        matches = [source for source in data.get('sources', []) if source['url'] == url]
+        collection = data['collection'] if 'config_version' in data else data
+        matches = [source for source in collection.get('sources', []) if source['url'] == url]
         if not matches:
             raise ValueError('Source missing from current configuration')
         if all(source.get('enabled', True) is False for source in matches):
@@ -35,7 +36,7 @@ def disable_source(path, url):
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent,
-                                             prefix='.sources-', suffix='.tmp', delete=False) as stream:
+                                             prefix='.config-', suffix='.tmp', delete=False) as stream:
                 temporary = Path(stream.name)
                 yaml.dump(data, stream)
                 stream.flush()

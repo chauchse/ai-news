@@ -1,12 +1,10 @@
 import re
-import yaml
-from pathlib import Path
+from project_config import load_section
 
 
 class CyberGlossary:
-    def __init__(self, config_path="/config/glossary.yaml"):
-        with open(config_path, encoding="utf-8") as f:
-            config = yaml.safe_load(f) or {}
+    def __init__(self, config_path=None):
+        config = load_section('glossary', config_path)
 
         self.terms = sorted(
             set(config.get("protected_terms", [])),

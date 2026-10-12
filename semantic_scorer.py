@@ -10,16 +10,15 @@ from pathlib import Path
 
 import numpy as np
 import psycopg
-import yaml
+from project_config import config_path, load_section
 from sentence_transformers import SentenceTransformer
 
-CONFIG_PATH = Path(os.getenv('SEMANTIC_SCORING_FILE', '/app/config/semantic_scoring.yaml'))
+CONFIG_PATH = Path(os.getenv('SEMANTIC_SCORING_FILE') or config_path())
 MODEL_NAME = os.getenv('EMBEDDING_MODEL', 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
 
 
 def load_config():
-    with CONFIG_PATH.open(encoding='utf-8') as f:
-        cfg = yaml.safe_load(f) or {}
+    cfg = load_section('semantic_scoring', CONFIG_PATH)
     domains = cfg.get('domains', [])
     if not domains or any(not d.get('name') or not d.get('descriptions') for d in domains):
         raise ValueError('Configuration invalide : domains/name/descriptions manquants')

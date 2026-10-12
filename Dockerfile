@@ -9,6 +9,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ /app/app/
-COPY config/ /app/config/
+COPY config.yaml /app/config.yaml
 
 CMD ["python", "-m", "app.collector"]
+
+COPY project_config.py /app/project_config.py

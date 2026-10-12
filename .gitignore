@@ -14,3 +14,8 @@ podcast/known_hosts
 config/.sources.lock
 config/.sources-*.tmp
 config/sources.yaml.bak
+
+# Global configuration: retirement lock, atomic-write temporaries and backup.
+.config.lock
+.config-*.tmp
+config.yaml.bak

@@ -31,7 +31,7 @@ from psycopg import sql
 
 import torch
 
-import yaml
+from project_config import config_path, load_section
 
 from sentence_transformers import SentenceTransformer
 
@@ -51,9 +51,9 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434").rstrip("/")
 
-CONFIG_PATH = os.getenv("BRIEFING_CONFIG", "/config/briefing.yaml")
+CONFIG_PATH = os.getenv("BRIEFING_CONFIG") or config_path()
 
-GLOSSARY_PATH = os.getenv("GLOSSARY_CONFIG", "/config/glossary.yaml")
+GLOSSARY_PATH = os.getenv("GLOSSARY_CONFIG") or config_path()
 
 TRANSLATOR = "Helsinki-NLP/opus-mt-en-fr"
 
@@ -81,9 +81,7 @@ DOMAIN_MAP = {
 
 def config_load():
 
-    with open(CONFIG_PATH, encoding="utf-8") as fh:
-
-        cfg = yaml.safe_load(fh) or {}
+    cfg = load_section('briefing', CONFIG_PATH)
 
     briefing = cfg["briefing"]
 
@@ -240,11 +238,10 @@ def same_event(a, b, similarity):
 
 
 def load_domain_profiles():
-    path = Path(os.getenv("SEMANTIC_SCORING_FILE", "/config/semantic_scoring.yaml"))
+    path = Path(os.getenv("SEMANTIC_SCORING_FILE") or config_path())
     if not path.is_file():
-        raise FileNotFoundError(f"Profils MiniLM introuvables : {path}. Monte semantic_scoring.yaml dans /config.")
-    with path.open(encoding="utf-8") as fh:
-        cfg = yaml.safe_load(fh) or {}
+        raise FileNotFoundError(f"Configuration MiniLM introuvable : {path}")
+    cfg = load_section('semantic_scoring', path)
     domains = cfg.get("domains", [])
     descriptions, names, slices = [], [], []
     for domain in domains:
@@ -255,7 +252,7 @@ def load_domain_profiles():
         names.append(str(domain["name"]).lower())
         slices.append((begin, len(descriptions)))
     if not descriptions:
-        raise ValueError("Aucun profil valide dans semantic_scoring.yaml")
+        raise ValueError("Aucun profil valide dans semantic_scoring")
     return descriptions, names, slices
 
 
