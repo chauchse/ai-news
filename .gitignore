@@ -15,3 +15,6 @@ podcast/known_hosts
 config/.sources.lock
 config/.sources-*.tmp
 config/sources.yaml.bak
+
+# Feedback private deployment data (never commit secrets or live votes).
+feedback/private/

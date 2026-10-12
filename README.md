@@ -21,7 +21,7 @@ config/sources.yaml
   → SFTP : MP3, illustration et podcast.xml
 ```
 
-La collecte et le scoring écrivent en base. Le briefing lit la base et écrit le Markdown ; ses évaluations Qwen ne sont pas conservées en base. Les modèles fonctionnent localement après téléchargement initial. Les priorités P1/P2 sont des signaux textuels provisoires, à vérifier dans les sources.
+La collecte et le scoring écrivent en base. Le briefing lit la base et écrit le Markdown ; la traçabilité optionnelle des retours conserve aussi ses évaluations Qwen après activation. Les modèles fonctionnent localement après téléchargement initial. Les priorités P1/P2 sont des signaux textuels provisoires, à vérifier dans les sources.
 
 Le regroupement du briefing est autonome. `embeddings.worker` est un outil de diagnostic qui affiche des similarités ; il ne calcule aucun score et ne stocke aucun groupe.
 
@@ -91,13 +91,14 @@ PostgreSQL et Ollama restent démarrés. Les autres services s’exécutent à l
 
 ### 3. Initialiser le schéma SQL
 
-Compose ne monte pas de scripts d’initialisation PostgreSQL. Sur une base neuve, appliquer les quatre fichiers dans l’ordre :
+Compose ne monte pas de scripts d’initialisation PostgreSQL. Sur une base neuve, appliquer les fichiers dans l’ordre :
 
 ```bash
 for sql in app/sql/001_initial_schema.sql \
            app/sql/002_normalized_content.sql \
            app/sql/003_article_scoring.sql \
-           app/sql/004_unique_articles.sql; do
+           app/sql/004_unique_articles.sql \
+           app/sql/005_feedback.sql; do
   docker compose exec -T postgres sh -c \
     'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$sql" || break
 done
@@ -349,9 +350,80 @@ La date audio/podcast est fixée au début du pipeline, même si l’exécution 
 
 Avant la sélection, le briefing lit les `briefing.md` des sept jours précédents dans `output/daily/AAAA-MM-JJ/en/` ou, à défaut, `fr/`. Il ne compare pas les deux éditions d’une même journée, ni celle du jour en cours. Aucun historique JSON supplémentaire n’est créé. Sans briefing antérieur, aucun contrôle n’est effectué.
 
-Les événements dont toutes les URL sources ont déjà été utilisées sont exclus. Pour les nouvelles sources ou reformulations FR/EN, MiniLM repère les événements proches ; Qwen confirme s’il s’agit du même événement sans information nouvelle. Une évolution substantielle est conservée, et un thème commun ne suffit pas à exclure un sujet. La détection sémantique reste probabiliste.
+Les événements sans résumé exploitable dont toutes les URL sources ont déjà été utilisées sont exclus. Avec du contenu disponible, une URL déjà traitée est soumise à l’arbitrage de nouveauté pour préserver les évolutions substantielles. Pour les nouvelles sources ou reformulations FR/EN, MiniLM repère les événements proches ; Qwen confirme s’il s’agit du même événement sans information nouvelle. Une évolution substantielle est conservée, et un thème commun ne suffit pas à exclure un sujet. La détection sémantique reste probabiliste.
 
 La configuration `briefing.history.days` règle la fenêtre (7 par défaut, 0 pour désactiver) et `similarity_threshold` le seuil de présélection sémantique (0.72). Le modèle MiniLM est partagé avec le regroupement pour éviter un deuxième chargement. Les exclusions sont consignées dans les logs. Les fichiers existants ne sont pas modifiés. Une erreur de lecture ou d’évaluation arrête la génération plutôt que d’ignorer silencieusement le contrôle.
+
+## Retours utilisateur et apprentissage local
+
+Une boucle optionnelle de votes par motif est préparée :
+
+```text
+Bouton du mail → confirmation PHP publique dans /feedback/
+  → fichiers JSON privés hors racine Web
+  → pull local → stockage PostgreSQL → confirmation et purge des retours importés
+  → personnalisation et apprentissage locaux → sélection du prochain briefing
+```
+
+Aucun modèle ni base distante.
+Les sources du composant public sont conservées dans [web/](web/),
+avec un exemple de configuration privée sans secrets. Le script PHP et son `.htaccess` sont déployés sur l’hébergement du podcast.
+Le `.htaccess` demande aussi aux robots de ne pas indexer les pages. Cela ne
+bloque pas les vérifications automatiques de Gmail : le GET reste sans vote,
+avec confirmation POST par défaut pour éviter les fausses annotations.
+Pour l’essai demandé, le vote dès le clic est activé dans la configuration
+PHP privée (`require_confirmation: false`, syntaxe PHP `=> false`). Remettre
+`require_confirmation` à `true` rétablit la confirmation, sans renvoyer les mails.
+Ce mode expérimental peut enregistrer les visites des vérificateurs Gmail ;
+le clic ouvre toujours une page Web.
+La personnalisation commence en parallèle ; l'entraînement supervisé CPU dispose
+de commandes séparées et n'active aucun modèle automatiquement.
+
+La fonctionnalité est désactivée par défaut dans `config/feedback.yaml`. Appliquer
+la migration `app/sql/005_feedback.sql`, préparer le composant public et vérifier
+ses permissions avant activation. L'URL vient de `FEEDBACK_URL` dans `.env`, avec
+deux secrets distincts pour les liens et l'API. Les briefings existants ne sont
+pas régénérés. Le composant public a été déployé le 12 octobre 2026 par SFTP :
+`/home/chaucha/podcast/feedback/` pour PHP et
+`/home/chaucha/ai-news-feedback-private/pending/` pour les JSON privés.
+La confirmation POST, le double envoi, le pull authentifié et l’ack exact ont
+été vérifiés en HTTPS avec un retour technique sauvegardé localement puis purgé.
+La migration PostgreSQL 005 a ensuite été appliquée et un import manuel réel
+a stocké deux retours avant confirmation et purge ; la file publique est vide.
+Ces retours de test sont conservés comme non résolus jusqu’au rattachement de
+leurs présentations. L’import automatique et la personnalisation restent désactivés.
+
+Des mails de test FR/EN ont été préparés à partir des briefings existants du
+12 octobre 2026 dans `output/feedback-email-test/2026-10-12/{fr,en}/` : ouvrir
+`email.html` pour l'aperçu ou `email.eml` dans un logiciel de messagerie.
+Chaque édition contient 14 événements et 84 liens signés vérifiés. À la demande
+de l'utilisateur, les deux mails portant un objet `[TEST FR]` ou `[TEST EN]` ont
+été acceptés par le serveur SMTP pour le destinataire configuré dans `.env`.
+Cela ne confirme pas leur arrivée en boîte de réception. Les reçus locaux
+`smtp-receipt.json` conservent la trace de l'envoi. Aucun podcast n'a été
+régénéré et les briefings originaux restent intacts.
+Un nouvel envoi FR/EN avec l’objet `[TEST FEEDBACK …]` a été accepté par SMTP
+pour tester le mode sans confirmation. La collecte suivante a importé 11 retours
+sans erreur, puis confirmé leur purge ; la file publique est vide.
+Les liens et identités initiaux sont réutilisés : un même lien déjà importé reste
+le même retour, sans double annotation. Les traces sont dans
+`output/feedback-email-test/essai-*/`.
+Les identifiants de ces copies sont propres au test, communs FR/EN et non
+enregistrés en base ; le test complet exige encore leur enregistrement local et l’import PostgreSQL. Ces fichiers contenant des liens signés restent privés.
+
+Audit PHP ciblé : plafond de 12 retours en attente par présentation, refus des
+POST cross-site, erreurs PHP masquées et fichiers publics limités au script.
+Correctifs déployés et vérifiés en HTTPS. Le mode direct reste sensible aux
+robots Gmail et aux liens volés ; l’hébergement n’a pas fait l’objet d’un audit complet.
+
+Première analyse locale : 13 soumissions, 11 présentations notées sur 14 ;
+6 votes effectifs « utile », 3 « hors sujet », 2 « déjà traité ».
+Rapports dans `output/feedback-analysis/20261012T122813Z/`.
+L’apprentissage a été lancé mais n’a créé aucun modèle : les présentations de
+test restent non résolues et les caractéristiques d’entraînement manquent.
+
+Voir [docs/feedback.md](docs/feedback.md) pour le protocole, les commandes,
+les tests, les limites d'évaluation et le retour arrière.
 
 ## Configuration utile
 
@@ -365,6 +437,7 @@ La configuration `briefing.history.days` règle la fenêtre (7 par défaut, 0 po
 | `config/glossary.yaml` | Termes protégés pendant la traduction |
 | `config/audio.yaml` | Moteur, voix et paramètres MP3 |
 | `config/podcast.yaml` | Métadonnées publiques, SFTP et rétention |
+| `config/feedback.yaml` | Activation, limites d’import et personnalisation (URL/secrets dans `.env`) |
 | `config/mail.yaml` | Objet par langue et paramètres SMTP (adresses dans `.env`) |
 
 Paramètres actuels du briefing : fenêtre de 24 heures, score minimum 35, plafond global de 15 événements, cible de 50 candidats Qwen, jusqu’à 8 arbitrages de déduplication. La sélection ordinaire exige une pertinence technique d’au moins 2/5 et une importance d’au moins `min_strategic_importance` (2 actuellement). La pertinence métier sert au classement ; aucun seuil minimum de pertinence métier n’est appliqué.
