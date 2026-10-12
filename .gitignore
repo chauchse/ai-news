@@ -6,7 +6,8 @@ output/
 audio/models/
 config/watchlist.yaml
 *.log
-
+AGENTS.md
+CADRAGE.md
 podcast/state/
 
 podcast/known_hosts
