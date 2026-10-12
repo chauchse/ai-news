@@ -84,9 +84,9 @@ existante ou une décision validée.
 
 ## Collecte et diagnostic
 
-Le catalogue utilise `sources[].url`, pas `feed_url`. Vérifier `SOURCES_FILE`
-et le montage réel (`/app/config` pour le collecteur, `/config` pour certains
-autres services). Parcourir toutes les sources actives, isoler les erreurs de
+Le catalogue utilise `collection.sources[].url`, pas `feed_url`. Vérifier
+`AI_NEWS_CONFIG` et le montage réel (`/workspace/config.yaml` pour le collecteur,
+`/app/config.yaml` pour les autres services). Parcourir toutes les sources actives, isoler les erreurs de
 flux et compter séparément articles trouvés, nouveaux, normalisés et éligibles.
 Zéro nouvelle normalisation ne suffit pas à conclure à une panne.
 
@@ -95,8 +95,8 @@ Les listes de sources, erreurs HTTP/XML et chiffres de tests historiques dans
 réannoncer un incident ou d'ajouter une source ; détecter les URL en double et
 les reprises, vérifier la fraîcheur du contenu des flux.
 
-Le collecteur actuel peut écrire `sources.yaml` pour désactiver automatiquement
-un flux. Ne pas imposer un montage en lecture seule sans tenir compte de cette
+Le collecteur actuel peut écrire `config.yaml` pour désactiver automatiquement
+un flux. Ne pas imposer un montage en lecture seule au collecteur sans tenir compte de cette
 fonction. Toute action sur une source désactivée doit considérer les effets de
 purge décrits dans le README.
 

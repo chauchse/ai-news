@@ -17,7 +17,7 @@ def load_section(name, path=None):
     if not isinstance(data, dict):
         raise ValueError('Configuration must be a mapping')
     if 'config_version' not in data:
-        if path is None:
+        if path is None or source.resolve() == config_path().resolve():
             raise ValueError('Global configuration version missing')
         return data  # Compatibility for existing CLI inputs and test fixtures.
     if type(data['config_version']) is not int or data['config_version'] != 1:

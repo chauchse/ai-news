@@ -55,6 +55,7 @@ class GlobalConfigurationTests(unittest.TestCase):
             self.assertEqual(load_section('audio', path), {'engine': 'piper'})
             with patch.dict(os.environ, {'AI_NEWS_CONFIG': str(path)}):
                 with self.assertRaises(ValueError): load_section('audio')
+                with self.assertRaises(ValueError): load_section('audio', path)
             for content in ('[]', 'config_version: 2\naudio: {}',
                             'config_version: true\naudio: {}', 'config_version: 1\nmail: {}'):
                 path.write_text(content)

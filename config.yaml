@@ -661,7 +661,7 @@ semantic_scoring:
 watchlists:
   # Les règles portent par défaut sur le titre et le résumé.
   # mode: literal (défaut) ou regex ; operator: any (défaut) ou all
-  # Example only: do not overwrite your existing watchlists.yaml
+  # Règles actives : modifier cette section, sans fichier de veille séparé.
   whitelist:
     - name: Technologies suivies
       keywords: [Ubuntu, Rocky Linux, Windows 11, Fortigate, Dealinea, GLPI, EspoCRM, ESX, Microsoft 365]

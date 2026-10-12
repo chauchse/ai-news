@@ -354,6 +354,76 @@ Les événements dont toutes les URL sources ont déjà été utilisées sont ex
 
 La configuration `briefing.briefing.history.days` règle la fenêtre (7 par défaut, 0 pour désactiver) et `similarity_threshold` le seuil de présélection sémantique (0.72). Le modèle MiniLM est partagé avec le regroupement pour éviter un deuxième chargement. Les exclusions sont consignées dans les logs. Les fichiers existants ne sont pas modifiés. Une erreur de lecture ou d’évaluation arrête la génération plutôt que d’ignorer silencieusement le contrôle.
 
+## Votes et apprentissage personnalisé
+
+**État actuel : cette fonction a été testée dans une version précédente, mais
+son code n’est plus présent dans ce dépôt.** Lors de la centralisation de la
+configuration, la version V2 sans les modules `feedback/` et `web/` a été retenue.
+Le pipeline actuel ne collecte donc pas les votes et n’apprend pas à partir d’eux.
+Reconstruire les images ne rétablit pas cette fonction.
+
+### Le flux prévu et testé précédemment
+
+```text
+Bouton sous une news dans le mail
+  → PHP public : réception du motif signé
+  → un fichier JSON par retour, dans un dossier privé hors racine Web
+  → serveur local : récupération avant une nouvelle sélection
+  → stockage durable PostgreSQL, puis confirmation de l’import
+  → serveur public : purge des seuls retours confirmés
+  → analyse locale des votes et recherche d’exemples proches
+  → proposition de sélection personnalisée pour les prochains briefings
+  → entraînement supervisé séparé, évaluation puis activation explicite
+```
+
+Aucun commentaire n’est nécessaire. Les six motifs sont : **utile**, **hors de
+mes sujets**, **pas applicable chez moi**, **trop superficiel / promotionnel**,
+**pas assez nouveau** et **déjà traité**. L’absence de vote reste inconnue ;
+« déjà traité » ne signifie pas que le thème est inutile. FR et EN partagent
+l’identité de l’événement pour éviter de compter deux fois la même actualité.
+
+### Ce que signifie « apprendre »
+
+1. **Collecter et analyser** : conserver les votes, leurs corrections et le
+   contenu des articles concernés. Collecter un vote ne modifie pas un modèle.
+2. **Personnaliser avec quelques exemples** : MiniLM retrouve des événements
+   annotés proches ; Qwen utilise ces exemples pour proposer une sélection.
+   Un rejet ponctuel ne doit pas interdire tout un thème ou un fournisseur.
+3. **Entraîner un modèle** : comparer une régression logistique locale à la
+   référence, puis éventuellement CatBoost. Le seuil initial prévu était de
+   100 événements distincts exploitables, dont 10 exemples par classe pour
+   l’utilité. Un vote doit être relié à son article et à ses caractéristiques ;
+   le nombre de clics seul ne suffit pas.
+
+Tous les modèles et calculs restent locaux. L’entraînement ne se déclenche pas
+à chaque clic et aucun modèle n’est promu automatiquement. La personnalisation
+commence en **mode parallèle** : la sélection habituelle est envoyée, la proposition
+personnalisée est enregistrée pour comparaison. L’activation vient après
+évaluation chronologique, avec possibilité de retour à la référence. Les éditions
+déjà générées restent figées.
+
+### Résultats des essais et suite nécessaire
+
+Les essais précédents ont vérifié l’envoi des mails, la réception PHP, le stockage
+PostgreSQL et la purge publique. L’apprentissage lancé n’a produit aucun modèle :
+les présentations de test restaient non rattachées et leurs caractéristiques
+d’entraînement manquaient. Après nettoyage des artefacts de développement, les
+correspondances des 14 présentations, les deux Markdown de test et les quatre
+rapports sont archivés dans PostgreSQL : `feedback_runs`,
+`kind = 'legacy_test_archive'`, `id = 3`, colonne JSONB `report`.
+Les 13 votes restent dans `feedback_returns`. Cet archivage préserve les données
+mais ne rattache pas les candidats et ne rend pas les exemples entraînables.
+Les mails, scripts temporaires, paquets de déploiement et sauvegardes de migration
+ont été supprimés ; les 30 fichiers de `output/daily/` sont inchangés.
+
+Pour reprendre cette fonction, il faut réintégrer son code et sa migration,
+adapter ses réglages au `config.yaml` global, rattacher les présentations de test,
+puis vérifier la boucle complète. La configuration PHP privée et les JSON déployés
+précédemment restent distincts du dépôt local ; leur état distant n’a pas été
+revérifié pour cette mise à jour documentaire. Le mode testé sans confirmation
+peut enregistrer des visites automatiques de Gmail : ces retours ne doivent pas
+être considérés comme certainement humains.
+
 ## Configuration globale
 
 Tous les réglages applicatifs sont réunis dans **`config.yaml` à la racine**,
@@ -391,15 +461,20 @@ Le lancement quotidien vérifie la compatibilité des images avant tout traiteme
 Les autres services lisent le fichier en lecture seule. Le collecteur monte le
 répertoire du projet dans `/workspace` pour permettre le remplacement atomique
 et la sauvegarde `config.yaml.bak` : ce conteneur a donc un accès en écriture au
-dépôt. Les anciennes configurations sont sauvegardées localement sous
-`output/config-migration/current-baseline/`, sans changement de données ou modèles.
+dépôt. Les anciennes configurations restent récupérables dans l’historique Git ;
+leurs copies temporaires de migration ont été supprimées après vérification.
+
+Vérifications locales : 39 tests passent, syntaxe Python et shell valide,
+configuration Compose valide et valeurs des neuf sections comparées à l’identique.
+La reconstruction des images reste à effectuer : le socket Docker est inaccessible
+dans cette session. Aucun pipeline complet, mail ou podcast lancé pour ces tests.
 
 Pour une copie globale de test, passer `--config /chemin/config.yaml` aux commandes
 mail/audio/podcast, ou `AI_NEWS_CONFIG=/chemin/config.yaml` en Python local.
 Les anciens fichiers explicitement passés et variables par module restent lisibles
 pour compatibilité, mais aucun fichier par module n’est fourni ni utilisé par défaut.
 Pour revenir en arrière, restaurer ensemble le code et Compose de la version
-précédente ainsi que les YAML sauvegardés, puis reconstruire ses images ; conserver
+précédente ainsi que ses YAML depuis Git, puis reconstruire ses images ; conserver
 `.env`, les volumes, les podcasts et les marqueurs quotidiens.
 
 ## Installer le lancement quotidien comme service

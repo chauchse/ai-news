@@ -333,3 +333,15 @@ sauvegardés dans `output/config-migration/current-baseline/`. Les nouvelles ima
 doivent être reconstruites avant exploitation ; le pipeline les contrôle avant
 ses effets. Aucun mail, podcast, modèle, volume ni planification n’est modifié
 pour tester la migration.
+
+## Nettoyage des artefacts de développement — 12 octobre 2026
+
+À la demande de l’utilisateur, suppression des cinq dossiers temporaires sous
+output : feedback-deploy, feedback-deploy-tools, feedback-email-test,
+feedback-analysis et config-migration. Avant suppression, correspondances des
+14 présentations, deux Markdown et quatre rapports archivés transactionnellement
+dans feedback_runs (kind legacy_test_archive, id 3), puis relus après commit.
+Les 13 votes PostgreSQL sont inchangés. Les 30 fichiers daily sont vérifiés
+identiques par SHA-256. Aucun effet sur l’hébergement public, les secrets .env,
+les modèles ou les volumes. L’archive conserve des données de test, pas des
+caractéristiques antidatées ni des annotations certifiées humaines.
