@@ -45,9 +45,10 @@ existante ou une décision validée.
 
 - Collecte et scoring : `app/collector.py`, `app/normalizer.py`, `app/scorer.py`.
 - Schéma : `app/sql/` ; `unique_articles` déduplique par GUID seulement.
-- Sélection : `embeddings/briefing.py` et `config/briefing.yaml`.
-- Profils sémantiques, veille et traduction : `config/semantic_scoring.yaml`,
-  `config/watchlists.yaml`, `config/glossary.yaml`.
+- Configuration applicative unique : `config.yaml` à la racine, lue via
+  `project_config.py`. Sélection : `embeddings/briefing.py`, section `briefing`.
+- Profils sémantiques, veille et traduction : sections `semantic_scoring`,
+  `watchlists` et `glossary` de `config.yaml`.
 - Mail : `mailer/send.py` ; podcast : `podcast/publish.py` ; audio : `audio/`.
 - Orchestration : `run-daily.sh`, `docker-compose.yml`, `post-install.sh`.
 - Tests existants : `tests/`. Utiliser les vérifications pertinentes au changement.
@@ -153,3 +154,18 @@ sur GET si sa configuration privée `require_confirmation` vaut false.
 Le défaut reste true ; documenter le risque de scanners et préserver le retour
 arrière par cette option. Cette exception remplace l’exigence GET sans vote
 uniquement pour ce mode explicitement demandé.
+
+## Configuration globale — état actuel validé
+
+L’utilisateur a confirmé de centraliser la version actuelle V2 sans réintroduire
+les modules feedback/web absents de cette version. Tous les réglages applicatifs
+sont dans `config.yaml` à la racine ; ne plus créer de YAML par module.
+Secrets et URL de déploiement restent dans `.env`. Les schémas SQL, manifestes
+Docker et artefacts de modèles ne sont pas des configurations applicatives.
+Lire via `project_config.load_section`, conserver les commentaires et tester
+la désactivation d’une source sans changement des autres sections.
+Le catalogue utilise désormais `collection.sources` et `collection.source_health`.
+Le collecteur lit `/workspace/config.yaml` dans le montage du projet permettant
+son remplacement atomique ; les autres services lisent `/app/config.yaml`.
+Reconstruire toutes les images Python après modification du lecteur partagé.
+Ne pas lancer le pipeline complet pour vérifier cette migration.

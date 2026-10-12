@@ -316,3 +316,20 @@ direct, configurable et réversible. Déployé via `require_confirmation => fals
 dans le privé PHP ; true rétablit le comportement initial. Les robots Gmail
 peuvent voter et les clics successifs sur des motifs différents ne constituent
 pas un historique chronologique fiable ; correction explicite POST disponible.
+
+## Centralisation de la configuration — décision du 12 octobre 2026
+
+Pendant l’inventaire, le dépôt est revenu à la version V2 et les modules feedback
+et web ont disparu. L’utilisateur a explicitement confirmé : « Centraliser l’état
+actuel ». Cette migration ne rétablit donc pas ces modules ; les descriptions
+précédentes du feedback restent historiques et ne décrivent pas le code actuel.
+
+Les neuf configurations actives sont réunies dans `config.yaml` commenté à la
+racine. Les valeurs effectives sont conservées, avec suppression d’une répétition
+identique de la clé `patched` du glossaire pour permettre les écritures ruamel.
+Le catalogue est sous `collection`; secrets et URL publiques restent dans `.env`.
+Le lecteur partagé, Docker et les scripts sont adaptés. Les YAML antérieurs sont
+sauvegardés dans `output/config-migration/current-baseline/`. Les nouvelles images
+doivent être reconstruites avant exploitation ; le pipeline les contrôle avant
+ses effets. Aucun mail, podcast, modèle, volume ni planification n’est modifié
+pour tester la migration.

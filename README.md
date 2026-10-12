@@ -5,7 +5,7 @@ Veille RSS/Atom sur l’IA, l’IT, la cybersécurité et les risques, avec un c
 ## Flux de traitement
 
 ```text
-config/sources.yaml
+config.yaml : collection.sources
   → Collecte RSS/Atom et normalisation HTML
   → PostgreSQL : articles et historique de collecte
   → Scoring par mots-clés, fraîcheur, longueur et bonus métier
@@ -50,7 +50,7 @@ Internet et plusieurs Go de disque sont nécessaires. Le script s’arrête à l
 ./init-repo.sh --models-only --with-piper
 ```
 
-Sources : [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M/tree/main) et [Piper voices](https://huggingface.co/rhasspy/piper-voices/tree/main). Le script contient les commandes `curl` de téléchargement. Ajouter manuellement toute voix personnalisée et adapter `config/audio.yaml`.
+Sources : [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M/tree/main) et [Piper voices](https://huggingface.co/rhasspy/piper-voices/tree/main). Le script contient les commandes `curl` de téléchargement. Ajouter manuellement toute voix personnalisée et adapter `config.yaml`.
 
 Aucune collecte, aucun mail et aucune publication ne sont lancés. Compléter les configurations SMTP/SFTP et `.env` avant le pipeline quotidien. Le fichier `podcast/known_hosts` est créé vide : ajouter la clé vérifiée du serveur avant publication. Pour utiliser un fichier existant, définir `PODCAST_KNOWN_HOSTS=/chemin/absolu/known_hosts` dans `.env`.
 
@@ -117,7 +117,7 @@ Le collecteur parcourt les sources activées, insère les nouveaux articles, pui
 
 **Comportement actuel : une source avec `enabled: false` entraîne la suppression de ses articles en base au début de la collecte.**
 
-Le catalogue et les autres configurations du collecteur sont montés depuis l’hôte. Une modification de `config/sources.yaml` est prise en compte à la prochaine collecte. Après modification du code ou des dépendances, reconstruire :
+Le catalogue et les autres configurations du collecteur sont montés depuis l’hôte. Une modification de `config.yaml` est prise en compte à la prochaine collecte. Après modification du code ou des dépendances, reconstruire :
 
 ```bash
 docker compose build collector
@@ -125,17 +125,18 @@ docker compose build collector
 
 ### Désactivation automatique des flux défaillants
 
-`config/sources.yaml` contient la politique :
+La section `collection` de `config.yaml` contient la politique :
 
 ```yaml
-source_health:
-  auto_disable: true
-  consecutive_failures: 3
+collection:
+  source_health:
+    auto_disable: true
+    consecutive_failures: 3
 ```
 
 Après trois échecs consécutifs de téléchargement ou de lecture d’un flux, la source passe à `enabled: false` dans le YAML et en base. Ses articles sont supprimés de la base ; la source et son historique `collection_runs` sont conservés. Une collecte réussie, même partielle, interrompt la série d’échecs. Un flux valide sans article n’est pas une erreur. Les erreurs SQL/internes ne comptent pas pour la désactivation automatique.
 
-Le fichier YAML est modifié sous verrou et remplacé atomiquement ; sa version précédente est conservée dans `config/sources.yaml.bak`. Les sources suivantes continuent d’être collectées. Les modifications restent visibles dans Git pour revue. Si l’écriture du YAML échoue, la source n’est pas automatiquement purgée en base.
+Le fichier YAML est modifié sous verrou et remplacé atomiquement ; sa version précédente est conservée dans `config.yaml.bak`. Les sources suivantes continuent d’être collectées. Les modifications restent visibles dans Git pour revue. Si l’écriture du YAML échoue, la source n’est pas automatiquement purgée en base.
 
 Pour réactiver une source après correction de son URL ou résolution du problème, remettre `enabled: true` dans le YAML : la prochaine collecte la réactive en base. Les articles seront récupérés à nouveau selon le contenu disponible du flux. Définir `auto_disable: false` pour conserver uniquement l’enregistrement des erreurs.
 
@@ -147,7 +148,7 @@ Après cette mise à jour, reconstruire le collecteur : `sudo docker compose bui
 docker compose run --rm -T collector python -m app.scorer
 ```
 
-Le score combine `config/scoring.yaml` et le bonus métier de `config/briefing.yaml`. Il est utilisé pour filtrer les candidats du briefing. `scoring.rescore_all: true` recalcule toute la base ; sinon les scores absents ou anciens de plus de 12 heures sont traités.
+Le score combine `scoring.topics` et le bonus métier de `briefing.scoring` dans `config.yaml`. Il est utilisé pour filtrer les candidats du briefing. `briefing.scoring.rescore_all: true` recalcule toute la base ; sinon les scores absents ou anciens de plus de 12 heures sont traités.
 
 Pour reprendre uniquement une normalisation incomplète :
 
@@ -195,11 +196,11 @@ docker compose --profile ai run --rm -T audio
 ls -lh "output/$(TZ=Europe/Paris date +%F)-briefing.mp3"
 ```
 
-`config/audio.yaml` indique l’entrée Markdown, le moteur, la voix, les pauses et le débit. Le module préfixe automatiquement le nom de sortie par la date en Europe/Paris.
+La section `audio` de `config.yaml` indique l’entrée Markdown, le moteur, la voix, les pauses et le débit. Le module préfixe automatiquement le nom de sortie par la date en Europe/Paris.
 
 Le MP3 est mono, encodé à 22 050 Hz. Les paramètres se règlent dans le YAML : `pause_ms` entre articles, `title_pause_ms` après les titres et rubriques (0 à 10 000 ms), et `bitrate` parmi `24k`, `32k`, `40k`, `48k`. Vérifier à l’écoute les sigles, noms propres, CVE et anglicismes ; les pauses ne garantissent pas une prosodie particulière. Vérifier aussi les licences des modèles et voix utilisés.
 
-Pour utiliser **Piper**, définir `engine: piper` dans `config/audio.yaml` et fournir le modèle ONNX ainsi que son fichier `.onnx.json` dans `audio/models/`. La voix française configurée est `/models/fr_FR-tom-medium.onnx`.
+Pour utiliser **Piper**, définir `audio.engine: piper` dans `config.yaml` et fournir le modèle ONNX ainsi que son fichier `.onnx.json` dans `audio/models/`. La voix française configurée est `/models/fr_FR-tom-medium.onnx`.
 
 ```bash
 docker compose --profile ai build audio
@@ -217,7 +218,7 @@ Repasser `engine: kokoro` pour le script quotidien, qui impose ce moteur. La gé
 
 ### 6. Préparer et publier le podcast (optionnel)
 
-Adapter `config/podcast.yaml` : métadonnées et rétention. Définir l’URL publique de base dans `.env` avec `PODCAST_SITE_URL` ; les éditions ajoutent automatiquement `/fr/` ou `/en/`. Fournir `podcast/cover.jpg` et les identifiants dans `.env`. La clé du serveur doit être vérifiée et présente dans le fichier `known_hosts` monté par Compose ; son chemin hôte par défaut est `./podcast/known_hosts`, configurable via `PODCAST_KNOWN_HOSTS` dans `.env`.
+Adapter la section `podcast` de `config.yaml` : métadonnées et rétention. Définir l’URL publique de base dans `.env` avec `PODCAST_SITE_URL` ; les éditions ajoutent automatiquement `/fr/` ou `/en/`. Fournir `podcast/cover.jpg` et les identifiants dans `.env`. La clé du serveur doit être vérifiée et présente dans le fichier `known_hosts` monté par Compose ; son chemin hôte par défaut est `./podcast/known_hosts`, configurable via `PODCAST_KNOWN_HOSTS` dans `.env`.
 
 Utiliser une illustration JPEG carrée, idéalement 3 000 × 3 000 pixels en RGB. Vérifier `PODCAST_SFTP_REMOTE_PATH` depuis la session SFTP. L’adresse `PODCAST_EMAIL` apparaît publiquement dans le RSS : choisir une adresse de contact adaptée.
 
@@ -260,7 +261,7 @@ Le contrôle à blanc nécessite déjà le MP3 daté, le Markdown et l’illustr
 
 Le service `mailer` transforme `output/briefing.md` en mail HTML avec titres, listes, tableaux et liens sources. Il joint aussi une version texte dans le même message. L’envoi est indépendant de l’audio et du podcast.
 
-Modifier `config/mail.yaml` :
+Modifier la section `mail` de `config.yaml` (extrait) :
 
 ```yaml
 input: /output/briefing.md
@@ -326,7 +327,7 @@ docker compose --profile ai run --rm -T -e BRIEFING_DAILY_DIR="/output/daily/$DA
 # Aperçu du mail anglais : daily/AAAA-MM-JJ/en/briefing-email.html
 docker compose --profile mail run --rm -T mailer --language en --input "/output/daily/$DAY/en/briefing.md" --dry-run
 # Générer l’audio anglais
-docker compose --profile ai run --rm -T audio --config /config/audio.yaml --language en --input "/output/daily/$DAY/en/briefing.md" --output "/output/daily/$DAY/en/briefing.mp3" --date "$DAY"
+docker compose --profile ai run --rm -T audio --config /config.yaml --language en --input "/output/daily/$DAY/en/briefing.md" --output "/output/daily/$DAY/en/briefing.mp3" --date "$DAY"
 # Vérifier la publication anglaise sans transfert
 docker compose --profile ai run --rm -T podcast --language en --date "$DAY" --dry-run
 ```
@@ -337,7 +338,7 @@ Reconstruire les images après cette mise à jour :
 docker compose --profile ai --profile mail build collector embeddings audio podcast mailer
 ```
 
-`config/mail.yaml` permet de surcharger `subject` dans `editions.en` et `editions.fr`. Les deux éditions utilisent `SENDER` et `RECIPIENT` définis dans `.env`. `config/audio.yaml` fournit les voix EN/FR. Dans `config/podcast.yaml`, `editions.en` définit le flux anglais sous `/en/`, son sous-répertoire SFTP `en` et `/state/episodes-en.json`. Le français utilise `/fr/`, le sous-répertoire SFTP `fr` et `/state/episodes-fr.json`. Le chemin distant de base vient de `PODCAST_SFTP_REMOTE_PATH` dans `.env` ; chaque édition ajoute `/fr` ou `/en`. Définir `PODCAST_SITE_URL` dans `.env` sans suffixe de langue ; les URL des éditions sont construites automatiquement en conservant un éventuel chemin de base.
+La section `mail` permet de surcharger `subject` dans `editions.en` et `editions.fr`. Les deux éditions utilisent `SENDER` et `RECIPIENT` définis dans `.env`. La section `audio` fournit les voix EN/FR. Dans la section `podcast`, `editions.en` définit le flux anglais sous `/en/`, son sous-répertoire SFTP `en` et `/state/episodes-en.json`. Le français utilise `/fr/`, le sous-répertoire SFTP `fr` et `/state/episodes-fr.json`. Le chemin distant de base vient de `PODCAST_SFTP_REMOTE_PATH` dans `.env` ; chaque édition ajoute `/fr` ou `/en`. Définir `PODCAST_SITE_URL` dans `.env` sans suffixe de langue ; les URL des éditions sont construites automatiquement en conservant un éventuel chemin de base.
 
 Chaque flux RSS contient les épisodes de sa langue : le flux français est à `/fr/podcast.xml` et le flux anglais à `/en/podcast.xml`. Le nouveau flux français démarre avec un historique distinct ; les anciens épisodes et le flux à la racine ne sont pas déplacés automatiquement. Les titres d’épisodes portent `[FR]` ou `[EN]` et sont localisés. La description utilise des sauts de ligne HTML (`<br/>`) pour les lecteurs RSS, avec une version texte multiligne dans `itunes:summary`. Les titres et noms des sources sont conservés dans leur langue d’origine.
 
@@ -351,25 +352,55 @@ Avant la sélection, le briefing lit les `briefing.md` des sept jours précéden
 
 Les événements dont toutes les URL sources ont déjà été utilisées sont exclus. Pour les nouvelles sources ou reformulations FR/EN, MiniLM repère les événements proches ; Qwen confirme s’il s’agit du même événement sans information nouvelle. Une évolution substantielle est conservée, et un thème commun ne suffit pas à exclure un sujet. La détection sémantique reste probabiliste.
 
-La configuration `briefing.history.days` règle la fenêtre (7 par défaut, 0 pour désactiver) et `similarity_threshold` le seuil de présélection sémantique (0.72). Le modèle MiniLM est partagé avec le regroupement pour éviter un deuxième chargement. Les exclusions sont consignées dans les logs. Les fichiers existants ne sont pas modifiés. Une erreur de lecture ou d’évaluation arrête la génération plutôt que d’ignorer silencieusement le contrôle.
+La configuration `briefing.briefing.history.days` règle la fenêtre (7 par défaut, 0 pour désactiver) et `similarity_threshold` le seuil de présélection sémantique (0.72). Le modèle MiniLM est partagé avec le regroupement pour éviter un deuxième chargement. Les exclusions sont consignées dans les logs. Les fichiers existants ne sont pas modifiés. Une erreur de lecture ou d’évaluation arrête la génération plutôt que d’ignorer silencieusement le contrôle.
 
-## Configuration utile
+## Configuration globale
 
-| Fichier | Rôle |
+Tous les réglages applicatifs sont réunis dans **`config.yaml` à la racine**,
+avec des sections commentées. Les secrets, adresses mail et URL publiques restent
+dans `.env`. `docker-compose.yml` décrit l’infrastructure, pas les choix éditoriaux.
+
+| Section | Rôle |
 |---|---|
-| `config/sources.yaml` | Catalogue RSS/Atom et activation des sources |
-| `config/scoring.yaml` | Mots-clés et pondérations du score historique |
-| `config/briefing.yaml` | Fenêtre, sélection, Qwen et bonus métier du scorer |
-| `config/watchlists.yaml` | Inclusion, exclusion et technologies suivies |
-| `config/semantic_scoring.yaml` | Descriptions des domaines pour MiniLM |
-| `config/glossary.yaml` | Termes protégés pendant la traduction |
-| `config/audio.yaml` | Moteur, voix et paramètres MP3 |
-| `config/podcast.yaml` | Métadonnées publiques, SFTP et rétention |
-| `config/mail.yaml` | Objet par langue et paramètres SMTP (adresses dans `.env`) |
+| `collection` | Catalogue RSS/Atom et désactivation automatique des sources |
+| `scoring` | Mots-clés et poids historiques |
+| `briefing` | `briefing` : sélection EN/FR ; `llm` : Qwen ; `scoring` : bonus métier |
+| `semantic_scoring` | Profils MiniLM et diagnostic |
+| `watchlists` | Inclusion, exclusion et technologies suivies |
+| `glossary` | Termes protégés et traduction |
+| `audio` | Moteur, voix, pauses et MP3 |
+| `podcast` | Métadonnées, éditions et rétention |
+| `mail` | Objets par langue et paramètres SMTP |
 
-Paramètres actuels du briefing : fenêtre de 24 heures, score minimum 35, plafond global de 15 événements, cible de 50 candidats Qwen, jusqu’à 8 arbitrages de déduplication. La sélection ordinaire exige une pertinence technique d’au moins 2/5 et une importance d’au moins `min_strategic_importance` (2 actuellement). La pertinence métier sert au classement ; aucun seuil minimum de pertinence métier n’est appliqué.
+Les valeurs antérieures ont été conservées : fenêtre de 24 h, score minimum 35,
+15 événements maximum, 50 candidats Qwen et 8 arbitrages de déduplication.
+Le contexte métier du prompt Qwen reste écrit dans `embeddings/briefing.py`.
+La modification du YAML ne régénère aucune édition et n’envoie aucun mail.
 
-Les fichiers de configuration du briefing sont montés depuis l’hôte. Ceux du collecteur et du scorer sont également montés depuis l’hôte. Le contexte métier du prompt Qwen reste écrit dans `embeddings/briefing.py` ; modifier le YAML ne le remplace pas.
+**Après cette migration, reconstruire les images avant le prochain lancement :**
+
+```bash
+docker compose --profile ai --profile mail build collector embeddings audio podcast mailer
+# Seulement si l’alternative XTTS est utilisée :
+docker compose --profile xtts build xtts
+# Vérification de la configuration Compose, sans afficher les secrets :
+docker compose --profile ai --profile mail config --quiet
+```
+
+Le lancement quotidien vérifie la compatibilité des images avant tout traitement.
+Les autres services lisent le fichier en lecture seule. Le collecteur monte le
+répertoire du projet dans `/workspace` pour permettre le remplacement atomique
+et la sauvegarde `config.yaml.bak` : ce conteneur a donc un accès en écriture au
+dépôt. Les anciennes configurations sont sauvegardées localement sous
+`output/config-migration/current-baseline/`, sans changement de données ou modèles.
+
+Pour une copie globale de test, passer `--config /chemin/config.yaml` aux commandes
+mail/audio/podcast, ou `AI_NEWS_CONFIG=/chemin/config.yaml` en Python local.
+Les anciens fichiers explicitement passés et variables par module restent lisibles
+pour compatibilité, mais aucun fichier par module n’est fourni ni utilisé par défaut.
+Pour revenir en arrière, restaurer ensemble le code et Compose de la version
+précédente ainsi que les YAML sauvegardés, puis reconstruire ses images ; conserver
+`.env`, les volumes, les podcasts et les marqueurs quotidiens.
 
 ## Installer le lancement quotidien comme service
 
