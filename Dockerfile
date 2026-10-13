@@ -12,3 +12,5 @@ COPY app/ /app/app/
 COPY config/ /app/config/
 
 CMD ["python", "-m", "app.collector"]
+
+COPY feedback/ /app/feedback/

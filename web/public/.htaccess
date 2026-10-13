@@ -1,0 +1,12 @@
+# Preserve the API Authorization header when PHP runs through CGI/FastCGI.
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+Options -Indexes
+<FilesMatch "^(?!feedback\.php$).*">
+    Require all denied
+</FilesMatch>
+
+# Advisory crawler directives, not authentication or protection from mail scanners.
+<IfModule mod_headers.c>
+    Header always set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+</IfModule>

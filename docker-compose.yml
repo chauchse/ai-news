@@ -23,6 +23,9 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SOURCES_FILE: /app/config/sources.yaml
+      FEEDBACK_CONFIG: /app/config/feedback.yaml
+      FEEDBACK_API_SECRET: ${FEEDBACK_API_SECRET:-}
+      FEEDBACK_URL: ${FEEDBACK_URL:-}
     volumes:
       - ./config:/app/config
     depends_on:
@@ -40,6 +43,7 @@ services:
       BRIEFING_CONFIG: /config/briefing.yaml
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: qwen2.5:3b
+      FEEDBACK_CONFIG: /config/feedback.yaml
     volumes:
       - embeddings_models:/models
       - ./config:/config:ro
@@ -126,10 +130,25 @@ services:
       RECIPIENT: ${RECIPIENT:-}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      FEEDBACK_SIGNING_SECRET: ${FEEDBACK_SIGNING_SECRET:-}
+      FEEDBACK_URL: ${FEEDBACK_URL:-}
     volumes:
       - ./config:/config:ro
       - ./output:/output
     mem_limit: 256m
+
+  feedback-learning:
+    profiles: [learning]
+    build:
+      context: .
+      dockerfile: feedback/Dockerfile.learning
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      FEEDBACK_CONFIG: /config/feedback.yaml
+    volumes:
+      - ./config:/config:ro
+      - ./output:/output
+    mem_limit: 2g
 
 volumes:
   postgres_data:

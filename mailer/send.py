@@ -1,6 +1,8 @@
 """Convert a Markdown briefing to an HTML email and send it over SMTP."""
 import argparse
 import os
+import re
+import time
 import smtplib
 import ssl
 from datetime import datetime
@@ -56,6 +58,9 @@ def render_html(text, language="fr"):
         attributes={'a': ['href', 'title']}, protocols=['https', 'http', 'mailto'],
         strip=True,
     )
+    body = re.sub(r'<a href="([^" ]+[?]action=vote(?:&amp;|&)token=[^" ]+)">',
+                  r'<a href="\1" style="display:inline-block;padding:8px 12px;margin:4px 2px;'
+                  r'border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;color:#172033">', body)
     return (f'<!doctype html><html lang="{language}"><head><meta charset="utf-8">'
             '<title>AI News</title></head><body style="margin:0;padding:24px;'
             'background:#f3f4f6;color:#172033;font-family:Arial,sans-serif;line-height:1.6">'
@@ -67,6 +72,22 @@ def build_message(cfg):
     text = Path(cfg.get('input', '/output/briefing.md')).read_text(encoding='utf-8')
     if not text.strip():
         raise ValueError('Briefing Markdown vide')
+    from feedback.settings import load as feedback_load
+    from feedback.common import links
+    feedback_cfg = feedback_load()
+    pattern = re.compile(r'<!-- feedback:([a-f0-9]{64}) -->')
+    if feedback_cfg['enabled']:
+        expires = int(Path(cfg.get('input', '/output/briefing.md')).stat().st_mtime) + feedback_cfg['link_days'] * 86400
+        if expires <= time.time():
+            raise ValueError('Feedback links would already be expired')
+        def replace_marker(match):
+            values = links(match[1], feedback_cfg['endpoint'], os.getenv('FEEDBACK_SIGNING_SECRET', ''),
+                           expires, cfg.get('language', 'fr'))
+            return '**' + ('Votre avis' if cfg.get('language', 'fr') == 'fr' else 'Your feedback') + '** : ' + ' · '.join(
+                '[' + label + '](' + url + ')' for label, url in values)
+        text = pattern.sub(replace_marker, text)
+    else:
+        text = pattern.sub('', text)
     today = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
     subject = str(cfg.get('subject', 'AI News — Briefing du {date}')).replace('{date}', today)
     msg = EmailMessage()

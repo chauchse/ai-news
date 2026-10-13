@@ -33,7 +33,7 @@ def extract(text):
                 break
             section = heading
             continue
-        if not line or line.startswith(('#', '**', '- ', '|')) or re.match(r'^(Score|Sources)\s*:', line, re.I):
+        if not line or line.startswith(('#', '**', '- ', '|', '<!--')) or re.match(r'^(Score|Sources)\s*:', line, re.I):
             continue
         if title:
             summary.append(re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', line))

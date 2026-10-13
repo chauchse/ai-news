@@ -41,6 +41,10 @@ fi
 # Une seule sélection multilingue et une seule série de synthèses Qwen.
 # Les deux Markdown sont figés pour les reprises de la même journée.
 if [[ ! -f "$STATE/generated" ]]; then
+    log 'Import des retours utilisateur'
+    if ! "${COMPOSE[@]}" run --rm -T collector python -m feedback.importer; then
+        log 'Import indisponible : poursuite avec les retours locaux, aucune purge non confirmée'
+    fi
     log 'Collecte et scoring'
     "${COMPOSE[@]}" run --rm -T collector
     "${COMPOSE[@]}" run --rm -T collector python -m app.scorer
