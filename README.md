@@ -385,7 +385,9 @@ bibliothèque standard et les dépendances déjà présentes du mailer.
 Réglages facultatifs dans la section `mail` du `config.yaml` principal :
 `feedback: {enabled: false, link_days: 90}` pour désactiver les boutons ; sans ce
 bloc, ils sont actifs lorsque l’URL est renseignée. L’expiration dépend du jour du
-briefing, jusqu’à la fin du 90e jour suivant, et les éditions expirées sont refusées.
+briefing : minuit Europe/Paris plus exactement 90 × 86 400 secondes par défaut.
+Les éditions futures ou expirées sont refusées. En mode GET direct, `link_days`
+doit correspondre à `link_seconds / 86400` dans le privé PHP (90 jours par défaut).
 Le fichier actuel appartenant à root, aucun réglage n’y a été ajouté lors de ce
 correctif. Une configuration incomplète avec URL renseignée interrompt le rendu.
 Retour arrière : retirer `FEEDBACK_URL` de l’environnement mailer ou désactiver
@@ -396,6 +398,32 @@ Vérifications locales : 47 tests réussis (dont 13 tests mail), validation Comp
 `config --quiet` réussie ; aucune inférence réelle ni envoi SMTP. La disponibilité
 du récepteur distant et l’enregistrement réel des nouveaux votes n’ont pas été
 vérifiés dans cette intervention.
+
+### Correction de la date des liens — 13 octobre 2026
+
+Le PHP historique en mode vote GET direct calcule la date de soumission avec
+`exp - link_seconds`. Le calcul initial du mailer ajoutait un jour et utilisait
+une durée calendaire : la date ainsi reconstruite pouvait être future, provoquant
+« Date de lien invalide ». Le mailer utilise désormais une durée exacte depuis
+minuit du jour du briefing à Paris, sans jour supplémentaire ni décalage lié au
+changement d’heure. Les identifiants de présentation, secrets et votes conservés
+ne changent pas. Le rendu reste local, sans accès réseau supplémentaire.
+
+Reconstruire le mailer et renvoyer explicitement les éditions depuis leurs
+Markdown existants pour obtenir de nouveaux liens ; les anciens mails restent
+inchangés. Aucun renvoi automatique ni modification du PHP distant n’est effectué.
+Pour suspendre les boutons : `mail.feedback.enabled: false` dans `config.yaml`.
+Tests : contrôle de la date déduite par le PHP sur trois dates, dont les passages
+heure d’été/hiver, et refus des briefings futurs. Le binaire PHP local étant absent,
+ce contrôle reproduit son calcul ; il ne valide pas le récepteur distant.
+
+Diagnostic complémentaire du 13 octobre : les aperçus
+`output/feedback-test-2026-10-13-{en,fr}.html` contiennent chacun 84 liens dont
+la date déduite vaut bien le 13 octobre à 00:00 à Paris **si** le PHP utilise
+`link_seconds = 7776000` (90 jours). Les 15 tests mail passent dans
+`/tmp/ai-news-tests-venv`. Une erreur persistante exige de vérifier le fichier
+effectivement ouvert et cette durée côté PHP ; le récepteur distant n’a pas été
+consulté et aucun lien GET n’a été suivi, car il pourrait enregistrer un vote.
 
 ### Le flux prévu et testé précédemment
 

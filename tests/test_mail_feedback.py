@@ -1,6 +1,8 @@
 import os
 import re
 import unittest
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 from mailer.send import add_feedback, render_html
@@ -50,3 +52,26 @@ class FeedbackMailTests(unittest.TestCase):
             add_feedback(self.text.replace('2026-10-13', '2020-01-01'), {})
         with self.assertRaises(ValueError):
             add_feedback(self.text.replace('- [Source](https://example.org/news)', ''), {})
+
+
+    def test_direct_vote_date_not_future_including_dst(self):
+        # The historical PHP direct-vote path computes exp - link_seconds.
+        # Regression: the old extra calendar day placed that date in the future.
+        for day in ('2026-10-13', '2026-03-20', '2026-10-20'):
+            with self.subTest(day=day):
+                midnight = int(datetime.fromisoformat(day).replace(tzinfo=ZoneInfo('Europe/Paris')).timestamp())
+                text = self.text.replace('2026-10-13', day)
+                with patch('mailer.send.time.time', return_value=midnight + 60):
+                    result = add_feedback(text, {})
+                    tokens = re.findall(r'\]\((https://example.com/[^\s]+)\)', result)
+                    for url in tokens:
+                        token = parse_qs(urlsplit(url).query)['token'][0]
+                        payload = verify(token, 'x' * 32, now=midnight + 60)
+                        submitted_at = payload['exp'] - 90 * 86400
+                        self.assertEqual(submitted_at, midnight)
+                        self.assertLessEqual(submitted_at, midnight + 60)
+
+    def test_future_briefing_refused_before_sending(self):
+        with patch('mailer.send.time.time', return_value=0):
+            with self.assertRaisesRegex(ValueError, 'future'):
+                add_feedback(self.text, {})

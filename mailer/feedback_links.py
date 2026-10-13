@@ -108,3 +108,33 @@ def links(presentation_id, url, secret, expires, language='fr'):
                        link_id=digest([presentation_id, reason, expires]), exp=expires)
         result.append((label, url + '?' + urlencode({'action': 'vote', 'token': sign(payload, secret)})))
     return result
+
+
+MARKER = re.compile(r'<!-- feedback:([a-f0-9]{64}) -->')
+
+
+def briefing_entries(text):
+    """Return exact published blocks and the identity used by email links."""
+    match = re.search(r'^# .*?\b(\d{4}-\d{2}-\d{2})\b', text, re.MULTILINE)
+    if not match:
+        raise ValueError('Date du briefing absente')
+    day = match[1]
+    datetime.fromisoformat(day)  # Reject invalid calendar dates.
+    blocks = re.split(r'(?=^### \d+\. )|(?=^## )', text, flags=re.MULTILINE)
+    entries = []
+    for index, block in enumerate(blocks):
+        if not re.match(r'^### \d+\. ', block):
+            continue
+        urls = sorted(set(re.findall(r'^- \[.*?\]\((https?://[^\s]+)\)$', block, re.MULTILINE)))
+        if not urls:
+            raise ValueError('Sources absentes pour le feedback')
+        event = digest({'scope': 'mail-feedback-v1', 'sources': urls})
+        markers = MARKER.findall(block)
+        if len(markers) > 1:
+            raise ValueError('Marqueurs feedback ambigus')
+        pid = markers[0] if markers else digest({'scope': 'mail-feedback-v1', 'event': event, 'briefing_date': day})
+        entries.append(dict(index=index, presentation_id=pid, event_id=event,
+                            source_urls=urls, content=block, title=block.splitlines()[0]))
+    if len({e['presentation_id'] for e in entries}) != len(entries):
+        raise ValueError('Présentations feedback en double')
+    return day, blocks, entries
