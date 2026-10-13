@@ -13,6 +13,7 @@ class CyberGlossary:
         )
 
         self.translations = config.get("translations", {}).get("en-fr", {})
+        self.case_sensitive_terms = set(config.get("case_sensitive_terms", []))
 
         self.patterns = [
             r"\bCVE-\d{4}-\d{4,}\b",
@@ -28,7 +29,7 @@ class CyberGlossary:
         for term in self.terms:
             pattern = re.compile(
                 rf"(?<!\w){re.escape(term)}(?!\w)",
-                re.IGNORECASE,
+                0 if term in self.case_sensitive_terms else re.IGNORECASE,
             )
 
             for match in pattern.finditer(text):

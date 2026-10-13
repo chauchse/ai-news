@@ -92,7 +92,7 @@ def score_article(title, content, published_at, topics):
         keywords = topic.get("keywords", [])
         matches = sum(1 for keyword in keywords if str(keyword).lower() in text)
         if matches:
-            candidate = min(topic["weight"], matches * 15)
+            candidate = min(topic["max_points"], matches * 15)
             topic_score = max(topic_score, candidate)
     topic_score = min(topic_score, 60)
 

@@ -9,6 +9,9 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
+from embeddings.prompts import render_prompt
+from project_config import load_section
+
 from audio.tts import extract, check_english_dependencies
 from mailer.send import render_html
 from podcast.publish import parse_articles, episode_description
@@ -18,7 +21,7 @@ def briefing_functions():
     tree = ast.parse(Path('embeddings/briefing.py').read_text())
     functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)
                  and node.name in ('main', 'format_markdown', 'french_fields', 'ensure_english')]
-    namespace = dict(json=json, datetime=datetime, timezone=timezone, Path=Path, os=os, time=time)
+    namespace = dict(render_prompt=render_prompt, json=json, datetime=datetime, timezone=timezone, Path=Path, os=os, time=time)
     exec(compile(ast.Module(body=functions, type_ignores=[]), '<briefing>', 'exec'), namespace)
     return namespace
 
@@ -40,7 +43,7 @@ class BilingualTests(unittest.TestCase):
                    'summary': 'Google has launched a new smart speaker with Gemini artificial intelligence.'}
         ns['ollama_json'] = Mock(return_value={'title': 'Google Home Speaker with Gemini AI reviewed',
                                                'summary': 'This must not replace the English summary.'})
-        result = ns['ensure_english'](content, {'llm': {'model': 'test'}})
+        result = ns['ensure_english'](content, load_section('briefing'))
         self.assertEqual(result['title'], 'Google Home Speaker with Gemini AI reviewed')
         self.assertEqual(result['summary'], content['summary'])
         ns['ollama_json'].assert_called_once()
@@ -50,7 +53,7 @@ class BilingualTests(unittest.TestCase):
         ns['ollama_json'] = Mock()
         content = {'title': 'Ubuntu 26.10 to Include Rust-based GnuPG Replacement',
                    'summary': 'Canonical is introducing a new OpenPGP implementation written in Rust.'}
-        self.assertEqual(ns['ensure_english'](content, {'llm': {'model': 'test'}}), content)
+        self.assertEqual(ns['ensure_english'](content, load_section('briefing')), content)
         ns['ollama_json'].assert_not_called()
 
     def test_persistent_french_is_rejected_after_bounded_retries(self):
@@ -59,7 +62,7 @@ class BilingualTests(unittest.TestCase):
                    'summary': 'Après des années d’immobilité, Google lance une nouvelle enceinte connectée avec l’intelligence artificielle Gemini.'}
         ns['ollama_json'] = Mock(return_value=content)
         with self.assertRaises(ValueError):
-            ns['ensure_english'](content, {'llm': {'model': 'test'}})
+            ns['ensure_english'](content, load_section('briefing'))
         self.assertEqual(ns['ollama_json'].call_count, 2)
 
     def test_single_synthesis_same_sources_and_order(self):
