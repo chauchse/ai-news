@@ -1,6 +1,8 @@
 """Convert a Markdown briefing to an HTML email and send it over SMTP."""
 import argparse
 import os
+import re
+import time
 import smtplib
 import ssl
 from datetime import datetime
@@ -13,6 +15,7 @@ import bleach
 import markdown
 import yaml
 from project_config import load_section
+from mailer.feedback_links import digest, links
 
 
 def address(value):
@@ -57,6 +60,9 @@ def render_html(text, language="fr"):
         attributes={'a': ['href', 'title']}, protocols=['https', 'http', 'mailto'],
         strip=True,
     )
+    body = re.sub(r'<a href="([^" ]+[?]action=vote(?:&amp;|&)token=[^" ]+)">',
+                  r'<a href="\1" style="display:inline-block;padding:8px 12px;margin:4px 2px;'
+                  r'border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;color:#172033">', body)
     return (f'<!doctype html><html lang="{language}"><head><meta charset="utf-8">'
             '<title>AI News</title></head><body style="margin:0;padding:24px;'
             'background:#f3f4f6;color:#172033;font-family:Arial,sans-serif;line-height:1.6">'
@@ -64,10 +70,53 @@ def render_html(text, language="fr"):
             + body + '</div></body></html>')
 
 
+def add_feedback(text, cfg):
+    options = cfg.get('feedback', {})
+    enabled = options.get('enabled', True)
+    if type(enabled) is not bool:
+        raise ValueError('mail.feedback.enabled doit être booléen')
+    url = os.getenv('FEEDBACK_URL', '').strip()
+    marker = re.compile(r'<!-- feedback:([a-f0-9]{64}) -->')
+    if not enabled or not url:
+        return marker.sub('', text)
+    days = options.get('link_days', 90)
+    if type(days) is not int or days < 1:
+        raise ValueError('Durée des liens invalide')
+    day_match = re.search(r'^# .*?\b(\d{4}-\d{2}-\d{2})\b', text, re.MULTILINE)
+    if not day_match:
+        raise ValueError('Date du briefing absente')
+    day = day_match[1]
+    from datetime import timedelta
+    expires = int((datetime.fromisoformat(day).replace(tzinfo=ZoneInfo('Europe/Paris'))
+                   + timedelta(days=days + 1)).timestamp())
+    if expires <= time.time():
+        raise ValueError('Liens feedback expirés')
+    language = cfg.get('language', 'fr')
+    blocks = re.split(r'(?=^### \d+\. )|(?=^## )', text, flags=re.MULTILINE)
+    for index, block in enumerate(blocks):
+        if not re.match(r'^### \d+\. ', block):
+            continue
+        match = marker.search(block)
+        urls = sorted(set(re.findall(r'^- \[.*?\]\((https?://[^\s]+)\)$', block, re.MULTILINE)))
+        if match:
+            pid = match[1]
+        elif urls:
+            event = digest({'scope': 'mail-feedback-v1', 'sources': urls})
+            pid = digest({'scope': 'mail-feedback-v1', 'event': event, 'briefing_date': day})
+        else:
+            raise ValueError('Sources absentes pour le feedback')
+        values = links(pid, url, os.getenv('FEEDBACK_SIGNING_SECRET', ''), expires, language)
+        label = 'Votre avis' if language == 'fr' else 'Your feedback'
+        buttons = '**' + label + '** : ' + ' · '.join('[' + name + '](' + link + ')' for name, link in values)
+        blocks[index] = marker.sub('', block).rstrip() + '\n\n' + buttons + '\n\n'
+    return ''.join(blocks)
+
+
 def build_message(cfg):
     text = Path(cfg.get('input', '/output/briefing.md')).read_text(encoding='utf-8')
     if not text.strip():
         raise ValueError('Briefing Markdown vide')
+    text = add_feedback(text, cfg)
     today = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
     subject = str(cfg.get('subject', 'AI News — Briefing du {date}')).replace('{date}', today)
     msg = EmailMessage()

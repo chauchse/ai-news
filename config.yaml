@@ -124,7 +124,8 @@ collection:
     url: http://downloadcenter.trendmicro.com/pull/feed/product/7?region=NABU
     category: Securité
     enabled: true
-  - name: MISP Open Source Threat Intelligence Platform & Open Standards For Threat Intelligence Sharing
+  - name: MISP Open Source Threat Intelligence Platform & Open Standards For 
+      Threat Intelligence Sharing
     url: http://www.misp-project.org/feed.xml
     category: Securité
     enabled: true
@@ -223,12 +224,13 @@ collection:
   - name: Announcements | Microsoft Azure Blog | Microsoft Azure
     url: http://azure.microsoft.com/blog/topics/announcements/feed/
     category: Actu societé IT
-    enabled: true
+    enabled: false
   - name: Microsoft Azure Blog > Mark Russinovich
     url: https://azure.microsoft.com/en-us/blog/author/markruss/feed/
     category: Actu societé IT
     enabled: false
-  - name: Channelnews.fr - l'actualité du business de l'informatique et des télécoms
+  - name: Channelnews.fr - l'actualité du business de l'informatique et des 
+      télécoms
     url: http://www.channelnews.fr/index.php?format=feed&type=rss
     category: Actu societé IT
     enabled: false
@@ -243,7 +245,7 @@ collection:
   - name: Announcements | Microsoft Azure Blog | Microsoft Azure
     url: https://azure.microsoft.com/en-us/blog/topics/updates/feed/
     category: Actu societé IT
-    enabled: true
+    enabled: false
   - name: Global Security Mag Online
     url: http://www.globalsecuritymag.fr/spip.php?page=backend
     category: Technologies
@@ -482,42 +484,42 @@ collection:
 # ==========================================================================
 scoring:
   topics:
-    - name: Cybersecurity
-      weight: 60
-      keywords:
-        - vulnerability
-        - exploit
-        - ransomware
-        - malware
-        - zero-day
-        - cve-
-        - breach
-        - cyberattack
-        - vulnérabilité
-        - cyberattaque
+  - name: Cybersecurity
+    weight: 60
+    keywords:
+    - vulnerability
+    - exploit
+    - ransomware
+    - malware
+    - zero-day
+    - cve-
+    - breach
+    - cyberattack
+    - vulnérabilité
+    - cyberattaque
 
-    - name: Artificial Intelligence
-      weight: 55
-      keywords:
-        - artificial intelligence
-        - machine learning
-        - llm
-        - generative ai
-        - openai
-        - deep learning
-        - intelligence artificielle
+  - name: Artificial Intelligence
+    weight: 55
+    keywords:
+    - artificial intelligence
+    - machine learning
+    - llm
+    - generative ai
+    - openai
+    - deep learning
+    - intelligence artificielle
 
-    - name: Infrastructure
-      weight: 40
-      keywords:
-        - linux
-        - kubernetes
-        - docker
-        - elasticsearch
-        - cloud computing
-        - virtualization
-        - vmware
-        - infrastructure
+  - name: Infrastructure
+    weight: 40
+    keywords:
+    - linux
+    - kubernetes
+    - docker
+    - elasticsearch
+    - cloud computing
+    - virtualization
+    - vmware
+    - infrastructure
 
 # ==========================================================================
 # Briefing commun EN/FR : sélection, Qwen et contexte métier.
@@ -583,15 +585,15 @@ briefing:
       country: LU
       industry: casino
       priorities:
-        - ai_adoption
-        - process_automation
-        - data_analytics
-        - digital_transformation
-        - cloud_infrastructure
-        - infrastructure_security
-        - business_continuity
-        - fraud_detection
-        - operational_risk
+      - ai_adoption
+      - process_automation
+      - data_analytics
+      - digital_transformation
+      - cloud_infrastructure
+      - infrastructure_security
+      - business_continuity
+      - fraud_detection
+      - operational_risk
 
     online_gaming_priority: low
 
@@ -609,51 +611,69 @@ semantic_scoring:
   batch_size: 24
 
   domains:
-    - name: cybersecurity
-      weight: 25
-      descriptions:
-        - "Critical cybersecurity vulnerabilities actively exploited in enterprise networks, remote access appliances, ransomware attacks and incident response."
-        - "Vulnérabilités exploitées, cyberattaques, compromissions, protection des données et sécurité des systèmes d'information."
-        - "Security operations center, threat detection, SIEM, network security and identity protection."
+  - name: cybersecurity
+    weight: 25
+    descriptions:
+    - "Critical cybersecurity vulnerabilities actively exploited in enterprise networks,
+      remote access appliances, ransomware attacks and incident response."
+    - "Vulnérabilités exploitées, cyberattaques, compromissions, protection des données
+      et sécurité des systèmes d'information."
+    - "Security operations center, threat detection, SIEM, network security and identity
+      protection."
 
-    - name: artificial_intelligence
-      weight: 25
-      descriptions:
-        - "Practical adoption of artificial intelligence in business, local language models, AI agents and automation of complex workflows."
-        - "Applications concrètes de l'intelligence artificielle, analyse prédictive, détection de fraude, exploitation des données et agents IA."
-        - "AI governance, security of large language models, retrieval augmented generation and open source AI systems."
+  - name: artificial_intelligence
+    weight: 25
+    descriptions:
+    - "Practical adoption of artificial intelligence in business, local language models,
+      AI agents and automation of complex workflows."
+    - "Applications concrètes de l'intelligence artificielle, analyse prédictive,
+      détection de fraude, exploitation des données et agents IA."
+    - "AI governance, security of large language models, retrieval augmented generation
+      and open source AI systems."
 
-    - name: risk_management
-      weight: 20
-      descriptions:
-        - "Enterprise risk management, operational risk, internal controls, fraud prevention, business continuity and disaster recovery."
-        - "Gestion des risques opérationnels, lutte contre la fraude, contrôle interne, continuité d'activité et risques liés aux prestataires."
-        - "Financial transaction monitoring, anti money laundering controls, compliance risks and governance in regulated businesses."
+  - name: risk_management
+    weight: 20
+    descriptions:
+    - "Enterprise risk management, operational risk, internal controls, fraud prevention,
+      business continuity and disaster recovery."
+    - "Gestion des risques opérationnels, lutte contre la fraude, contrôle interne,
+      continuité d'activité et risques liés aux prestataires."
+    - "Financial transaction monitoring, anti money laundering controls, compliance
+      risks and governance in regulated businesses."
 
-    - name: digital_transformation
-      weight: 15
-      descriptions:
-        - "Digital transformation of business operations, process automation, enterprise integration and paperless workflows."
-        - "Digitalisation des processus, dématérialisation, automatisation administrative, gouvernance et valorisation des données."
-        - "Modernizing legacy information systems, API integration, enterprise architecture and workflow orchestration."
+  - name: digital_transformation
+    weight: 15
+    descriptions:
+    - "Digital transformation of business operations, process automation, enterprise
+      integration and paperless workflows."
+    - "Digitalisation des processus, dématérialisation, automatisation administrative,
+      gouvernance et valorisation des données."
+    - "Modernizing legacy information systems, API integration, enterprise architecture
+      and workflow orchestration."
 
-    - name: regulation
-      weight: 10
-      descriptions:
-        - "European Union and Luxembourg cybersecurity, privacy, artificial intelligence and anti money laundering regulations."
-        - "Conformité réglementaire au Luxembourg et en Europe, RGPD, protection des données, gouvernance IA et obligations de sécurité."
+  - name: regulation
+    weight: 10
+    descriptions:
+    - "European Union and Luxembourg cybersecurity, privacy, artificial intelligence
+      and anti money laundering regulations."
+    - "Conformité réglementaire au Luxembourg et en Europe, RGPD, protection des données,
+      gouvernance IA et obligations de sécurité."
 
-    - name: infrastructure
-      weight: 5
-      descriptions:
-        - "Enterprise IT infrastructure, Linux, virtualization, VMware, Docker, Kubernetes, Elasticsearch and cloud architecture."
-        - "Infrastructure informatique, supervision, sauvegarde, disponibilité des services et exploitation des plateformes techniques."
+  - name: infrastructure
+    weight: 5
+    descriptions:
+    - "Enterprise IT infrastructure, Linux, virtualization, VMware, Docker, Kubernetes,
+      Elasticsearch and cloud architecture."
+    - "Infrastructure informatique, supervision, sauvegarde, disponibilité des services
+      et exploitation des plateformes techniques."
 
-    - name: gaming_industry
-      weight: 5
-      descriptions:
-        - "Technology and operational management of physical casinos, gaming machines, casino surveillance, cash handling and gaming systems."
-        - "Technologies des casinos terrestres, systèmes de caisse, machines à sous, contrôle des opérations et sécurité des établissements de jeux."
+  - name: gaming_industry
+    weight: 5
+    descriptions:
+    - "Technology and operational management of physical casinos, gaming machines,
+      casino surveillance, cash handling and gaming systems."
+    - "Technologies des casinos terrestres, systèmes de caisse, machines à sous, contrôle
+      des opérations et sécurité des établissements de jeux."
 
 # ==========================================================================
 # Veille : inclusions, exclusions et technologies suivies.
@@ -663,20 +683,21 @@ watchlists:
   # mode: literal (défaut) ou regex ; operator: any (défaut) ou all
   # Règles actives : modifier cette section, sans fichier de veille séparé.
   whitelist:
-    - name: Technologies suivies
-      keywords: [Ubuntu, Rocky Linux, Windows 11, Fortigate, Dealinea, GLPI, EspoCRM, ESX, Microsoft 365]
-      scope: title_summary
-      priority: high
-    - name: IA stratégique
-      keywords: [OpenAI, Anthropic, AI agents, intelligence artificielle]
-      priority: normal
+  - name: Technologies suivies
+    keywords: [Ubuntu, Rocky Linux, Windows 11, Fortigate, Dealinea, GLPI, 
+        EspoCRM, ESX, Microsoft 365]
+    scope: title_summary
+    priority: high
+  - name: IA stratégique
+    keywords: [OpenAI, Anthropic, AI agents, intelligence artificielle]
+    priority: normal
   blacklist:
-    - name: Jeux vidéo grand public
-      keywords: [Steam Deck, PlayStation, Xbox, PS5, Nintendo]
-      absolute: false
-    - name: Promotions
-      keywords: [giveaway, sponsored content]
-      absolute: false
+  - name: Jeux vidéo grand public
+    keywords: [Steam Deck, PlayStation, Xbox, PS5, Nintendo]
+    absolute: false
+  - name: Promotions
+    keywords: [giveaway, sponsored content]
+    absolute: false
 
   # Une blacklist absolute: true exclut même une alerte de sécurité.
 
@@ -694,409 +715,409 @@ glossary:
     # ----------------------------------------------------------
     # Organismes, référentiels et standards
     # ----------------------------------------------------------
-    - ANSSI
-    - CERT-FR
-    - CISA
-    - NISTS
-    - ENISA
-    - MITRE
-    - MITRE ATT&CK
-    - MITRE D3FEND
-    - OWASP
-    - FIRST
-    - CIS
-    - ISO 27001
-    - ISO 27002
-    - ISO 27005
-    - ISO 27035
-    - IEC 62443
-    - NIS2
-    - DORA
-    - GDPR
-    - RGPD
-    - CVE
-    - CVSS
-    - CWE
-    - CAPEC
-    - CPE
-    - KEV
-    - EPSS
-    - STIX
-    - TAXII
-    - TLP
-    - OCSF
-    - ECS
-    - Sigma
-    - YARA
-    - YARA-L
-    - OpenIOC
-    - CVSS v3
-    - CVSS v4
+  - ANSSI
+  - CERT-FR
+  - CISA
+  - NISTS
+  - ENISA
+  - MITRE
+  - MITRE ATT&CK
+  - MITRE D3FEND
+  - OWASP
+  - FIRST
+  - CIS
+  - ISO 27001
+  - ISO 27002
+  - ISO 27005
+  - ISO 27035
+  - IEC 62443
+  - NIS2
+  - DORA
+  - GDPR
+  - RGPD
+  - CVE
+  - CVSS
+  - CWE
+  - CAPEC
+  - CPE
+  - KEV
+  - EPSS
+  - STIX
+  - TAXII
+  - TLP
+  - OCSF
+  - ECS
+  - Sigma
+  - YARA
+  - YARA-L
+  - OpenIOC
+  - CVSS v3
+  - CVSS v4
 
     # ----------------------------------------------------------
     # Éditeurs et produits de sécurité
     # ----------------------------------------------------------
-    - Elastic
-    - Elasticsearch
-    - Kibana
-    - Logstash
-    - Elastic Agent
-    - Elastic Security
-    - Elastic Defend
-    - Elastic SIEM
-    - Fleet
-    - Beats
-    - Winlogbeat
-    - Filebeat
-    - Packetbeat
-    - Auditbeat
-    - CrowdStrike
-    - Falcon
-    - SentinelOne
-    - Singularity
-    - Microsoft Defender
-    - Microsoft Defender for Endpoint
-    - Microsoft Sentinel
-    - Microsoft Entra ID
-    - Microsoft Intune
-    - Microsoft Purview
-    - Splunk
-    - Splunk Enterprise Security
-    - QRadar
-    - Wazuh
-    - Suricata
-    - Snort
-    - Zeek
-    - Security Onion
-    - Cortex XSOAR
-    - Cortex XDR
-    - Palo Alto Networks
-    - Fortinet
-    - FortiGate
-    - FortiOS
-    - FortiAnalyzer
-    - Check Point
-    - Sophos
-    - Trend Micro
-    - Trellix
-    - ESET
-    - Bitdefender
-    - Proofpoint
-    - Mimecast
-    - Rapid7
-    - InsightVM
-    - Tenable
-    - Nessus
-    - Qualys
-    - OpenVAS
-    - Greenbone
-    - Burp Suite
-    - Metasploit
-    - Nmap
-    - Wireshark
-    - Shodan
-    - Censys
-    - VirusTotal
-    - MISP
-    - OpenCTI
-    - TheHive
-    - Cortex
-    - Velociraptor
-    - osquery
-    - Sysmon
-    - Sysinternals
-    - Volatility
-    - Autopsy
+  - Elastic
+  - Elasticsearch
+  - Kibana
+  - Logstash
+  - Elastic Agent
+  - Elastic Security
+  - Elastic Defend
+  - Elastic SIEM
+  - Fleet
+  - Beats
+  - Winlogbeat
+  - Filebeat
+  - Packetbeat
+  - Auditbeat
+  - CrowdStrike
+  - Falcon
+  - SentinelOne
+  - Singularity
+  - Microsoft Defender
+  - Microsoft Defender for Endpoint
+  - Microsoft Sentinel
+  - Microsoft Entra ID
+  - Microsoft Intune
+  - Microsoft Purview
+  - Splunk
+  - Splunk Enterprise Security
+  - QRadar
+  - Wazuh
+  - Suricata
+  - Snort
+  - Zeek
+  - Security Onion
+  - Cortex XSOAR
+  - Cortex XDR
+  - Palo Alto Networks
+  - Fortinet
+  - FortiGate
+  - FortiOS
+  - FortiAnalyzer
+  - Check Point
+  - Sophos
+  - Trend Micro
+  - Trellix
+  - ESET
+  - Bitdefender
+  - Proofpoint
+  - Mimecast
+  - Rapid7
+  - InsightVM
+  - Tenable
+  - Nessus
+  - Qualys
+  - OpenVAS
+  - Greenbone
+  - Burp Suite
+  - Metasploit
+  - Nmap
+  - Wireshark
+  - Shodan
+  - Censys
+  - VirusTotal
+  - MISP
+  - OpenCTI
+  - TheHive
+  - Cortex
+  - Velociraptor
+  - osquery
+  - Sysmon
+  - Sysinternals
+  - Volatility
+  - Autopsy
 
     # ----------------------------------------------------------
     # Constructeurs et plateformes
     # ----------------------------------------------------------
-    - Microsoft
-    - Windows
-    - Windows Server
-    - Active Directory
-    - Azure
-    - Azure AD
-    - AWS
-    - Amazon Web Services
-    - Google Cloud
-    - GCP
-    - Google Workspace
-    - VMware
-    - vSphere
-    - ESXi
-    - vCenter
-    - Omnissa
-    - Horizon
-    - Citrix
-    - NetScaler
-    - Cisco
-    - Cisco IOS
-    - Cisco ASA
-    - Juniper
-    - Junos
-    - SonicWall
-    - SMA1000
-    - Ivanti
-    - Connect Secure
-    - Pulse Secure
-    - F5
-    - BIG-IP
-    - AhsayCBS
-    - Microsoft Edge
-    - Chrome
-    - Firefox
-    - Linux
-    - Ubuntu
-    - Debian
-    - Red Hat
-    - RHEL
-    - Rocky Linux
-    - AlmaLinux
-    - Kubernetes
-    - Docker
-    - OpenShift
-    - Terraform
-    - Ansible
-    - GitLab
-    - GitHub
-    - Jenkins
-    - Apache
-    - Nginx
-    - PostgreSQL
-    - MySQL
-    - Redis
-    - ProFTPD
-    - OpenSSH
-    - OpenSSL
-    - sudo
-    - wpa_supplicant
+  - Microsoft
+  - Windows
+  - Windows Server
+  - Active Directory
+  - Azure
+  - Azure AD
+  - AWS
+  - Amazon Web Services
+  - Google Cloud
+  - GCP
+  - Google Workspace
+  - VMware
+  - vSphere
+  - ESXi
+  - vCenter
+  - Omnissa
+  - Horizon
+  - Citrix
+  - NetScaler
+  - Cisco
+  - Cisco IOS
+  - Cisco ASA
+  - Juniper
+  - Junos
+  - SonicWall
+  - SMA1000
+  - Ivanti
+  - Connect Secure
+  - Pulse Secure
+  - F5
+  - BIG-IP
+  - AhsayCBS
+  - Microsoft Edge
+  - Chrome
+  - Firefox
+  - Linux
+  - Ubuntu
+  - Debian
+  - Red Hat
+  - RHEL
+  - Rocky Linux
+  - AlmaLinux
+  - Kubernetes
+  - Docker
+  - OpenShift
+  - Terraform
+  - Ansible
+  - GitLab
+  - GitHub
+  - Jenkins
+  - Apache
+  - Nginx
+  - PostgreSQL
+  - MySQL
+  - Redis
+  - ProFTPD
+  - OpenSSH
+  - OpenSSL
+  - sudo
+  - wpa_supplicant
 
     # ----------------------------------------------------------
     # Groupes de menace et campagnes
     # ----------------------------------------------------------
-    - APT28
-    - APT29
-    - APT31
-    - APT41
-    - Lazarus
-    - Lazarus Group
-    - Sandworm
-    - Turla
-    - Gamaredon
-    - Kimsuky
-    - MuddyWater
-    - OilRig
-    - Charming Kitten
-    - Volt Typhoon
-    - Flax Typhoon
-    - Salt Typhoon
-    - Silk Typhoon
-    - Scattered Spider
-    - ShinyHunters
-    - FIN7
-    - FIN8
-    - FIN11
-    - TA505
-    - TA551
-    - UNC2452
-    - LockBit
-    - BlackCat
-    - ALPHV
-    - Clop
-    - Cl0p
-    - Akira
-    - Play
-    - Black Basta
-    - RansomHub
-    - Qilin
-    - Rhysida
-    - Medusa
-    - DragonForce
-    - Conti
-    - REvil
-    - DarkSide
-    - BlackMatter
-    - Hive
-    - Royal
-    - 8Base
+  - APT28
+  - APT29
+  - APT31
+  - APT41
+  - Lazarus
+  - Lazarus Group
+  - Sandworm
+  - Turla
+  - Gamaredon
+  - Kimsuky
+  - MuddyWater
+  - OilRig
+  - Charming Kitten
+  - Volt Typhoon
+  - Flax Typhoon
+  - Salt Typhoon
+  - Silk Typhoon
+  - Scattered Spider
+  - ShinyHunters
+  - FIN7
+  - FIN8
+  - FIN11
+  - TA505
+  - TA551
+  - UNC2452
+  - LockBit
+  - BlackCat
+  - ALPHV
+  - Clop
+  - Cl0p
+  - Akira
+  - Play
+  - Black Basta
+  - RansomHub
+  - Qilin
+  - Rhysida
+  - Medusa
+  - DragonForce
+  - Conti
+  - REvil
+  - DarkSide
+  - BlackMatter
+  - Hive
+  - Royal
+  - 8Base
 
     # ----------------------------------------------------------
     # Malwares, outils et frameworks
     # ----------------------------------------------------------
-    - XMRig
-    - Cobalt Strike
-    - Sliver
-    - Brute Ratel
-    - Empire
-    - Metasploit Framework
-    - Mimikatz
-    - Rubeus
-    - BloodHound
-    - SharpHound
-    - Impacket
-    - PsExec
-    - PowerShell
-    - PowerShell Empire
-    - LOLBAS
-    - GTFOBins
-    - Living off the Land
-    - TrickBot
-    - Emotet
-    - QakBot
-    - Qbot
-    - IcedID
-    - Bumblebee
-    - BazarLoader
-    - SmokeLoader
-    - AsyncRAT
-    - Remcos
-    - Agent Tesla
-    - RedLine
-    - Lumma
-    - FormBook
-    - XLoader
-    - PlugX
-    - ShadowPad
-    - Gh0st RAT
-    - QuasarRAT
-    - njRAT
-    - DarkComet
-    - Mirai
-    - Mozi
-    - Gafgyt
-    - P2PInfect
-    - WannaCry
-    - NotPetya
-    - Stuxnet
-    - Industroyer
-    - Triton
-    - BlackEnergy
+  - XMRig
+  - Cobalt Strike
+  - Sliver
+  - Brute Ratel
+  - Empire
+  - Metasploit Framework
+  - Mimikatz
+  - Rubeus
+  - BloodHound
+  - SharpHound
+  - Impacket
+  - PsExec
+  - PowerShell
+  - PowerShell Empire
+  - LOLBAS
+  - GTFOBins
+  - Living off the Land
+  - TrickBot
+  - Emotet
+  - QakBot
+  - Qbot
+  - IcedID
+  - Bumblebee
+  - BazarLoader
+  - SmokeLoader
+  - AsyncRAT
+  - Remcos
+  - Agent Tesla
+  - RedLine
+  - Lumma
+  - FormBook
+  - XLoader
+  - PlugX
+  - ShadowPad
+  - Gh0st RAT
+  - QuasarRAT
+  - njRAT
+  - DarkComet
+  - Mirai
+  - Mozi
+  - Gafgyt
+  - P2PInfect
+  - WannaCry
+  - NotPetya
+  - Stuxnet
+  - Industroyer
+  - Triton
+  - BlackEnergy
 
     # ----------------------------------------------------------
     # Protocoles, technologies et identifiants
     # ----------------------------------------------------------
-    - TCP
-    - UDP
-    - IP
-    - IPv4
-    - IPv6
-    - DNS
-    - DNSSEC
-    - DNS-over-HTTPS
-    - DoH
-    - DoT
-    - HTTP
-    - HTTPS
-    - HTTP/2
-    - HTTP/3
-    - TLS
-    - SSL
-    - SSH
-    - RDP
-    - SMB
-    - SMBv1
-    - SMBv2
-    - SMBv3
-    - LDAP
-    - LDAPS
-    - Kerberos
-    - NTLM
-    - SAML
-    - OAuth
-    - OAuth 2.0
-    - OpenID Connect
-    - OIDC
-    - JWT
-    - MFA
-    - FIDO2
-    - WebAuthn
-    - SSO
-    - PAM
-    - IAM
-    - IGA
-    - PKI
-    - HSM
-    - TPM
-    - AES
-    - RSA
-    - SHA-256
-    - SHA-1
-    - MD5
-    - X.509
-    - IPsec
-    - WireGuard
-    - OpenVPN
-    - BGP
-    - SNMP
-    - SMTP
-    - IMAP
-    - POP3
-    - NTP
-    - Syslog
-    - RFC 5424
-    - JSON
-    - YAML
-    - XML
-    - REST
-    - GraphQL
-    - API
-    - CLI
-    - SQL
-    - ES|QL
-    - KQL
-    - EQL
-    - Lucene
-    - Sigma
-    - YARA
+  - TCP
+  - UDP
+  - IP
+  - IPv4
+  - IPv6
+  - DNS
+  - DNSSEC
+  - DNS-over-HTTPS
+  - DoH
+  - DoT
+  - HTTP
+  - HTTPS
+  - HTTP/2
+  - HTTP/3
+  - TLS
+  - SSL
+  - SSH
+  - RDP
+  - SMB
+  - SMBv1
+  - SMBv2
+  - SMBv3
+  - LDAP
+  - LDAPS
+  - Kerberos
+  - NTLM
+  - SAML
+  - OAuth
+  - OAuth 2.0
+  - OpenID Connect
+  - OIDC
+  - JWT
+  - MFA
+  - FIDO2
+  - WebAuthn
+  - SSO
+  - PAM
+  - IAM
+  - IGA
+  - PKI
+  - HSM
+  - TPM
+  - AES
+  - RSA
+  - SHA-256
+  - SHA-1
+  - MD5
+  - X.509
+  - IPsec
+  - WireGuard
+  - OpenVPN
+  - BGP
+  - SNMP
+  - SMTP
+  - IMAP
+  - POP3
+  - NTP
+  - Syslog
+  - RFC 5424
+  - JSON
+  - YAML
+  - XML
+  - REST
+  - GraphQL
+  - API
+  - CLI
+  - SQL
+  - ES|QL
+  - KQL
+  - EQL
+  - Lucene
+  - Sigma
+  - YARA
 
     # ----------------------------------------------------------
     # Concepts courants à conserver selon le contexte
     # ----------------------------------------------------------
-    - Zero Trust
-    - DevSecOps
-    - SecOps
-    - XDR
-    - EDR
-    - NDR
-    - MDR
-    - SIEM
-    - SOAR
-    - SOC
-    - CSIRT
-    - CERT
-    - CTI
-    - OSINT
-    - DFIR
-    - IOC
-    - IOA
-    - TTP
-    - DLP
-    - CASB
-    - SASE
-    - SSE
-    - CSPM
-    - CWPP
-    - CNAPP
-    - CIEM
-    - SBOM
-    - SAST
-    - DAST
-    - IAST
-    - RASP
-    - WAF
-    - IDS
-    - IPS
-    - NGFW
-    - NAC
-    - ZTNA
-    - BYOD
-    - OT
-    - ICS
-    - SCADA
-    - PLC
-    - HMI
-    - IIoT
+  - Zero Trust
+  - DevSecOps
+  - SecOps
+  - XDR
+  - EDR
+  - NDR
+  - MDR
+  - SIEM
+  - SOAR
+  - SOC
+  - CSIRT
+  - CERT
+  - CTI
+  - OSINT
+  - DFIR
+  - IOC
+  - IOA
+  - TTP
+  - DLP
+  - CASB
+  - SASE
+  - SSE
+  - CSPM
+  - CWPP
+  - CNAPP
+  - CIEM
+  - SBOM
+  - SAST
+  - DAST
+  - IAST
+  - RASP
+  - WAF
+  - IDS
+  - IPS
+  - NGFW
+  - NAC
+  - ZTNA
+  - BYOD
+  - OT
+  - ICS
+  - SCADA
+  - PLC
+  - HMI
+  - IIoT
 
 
   # ============================================================
@@ -1580,7 +1601,7 @@ audio:
   # Configuration audio AI News V56
   input: /output/briefing.md
   output: /output/briefing.mp3
-  engine: kokoro 
+  engine: kokoro
   # piper | kokoro | xtts
   language: fr
   voices:
@@ -1613,7 +1634,8 @@ podcast:
 
   podcast:
     title: "AI News — Veille IA et cybersécurité"
-    description: "Briefing quotidien de veille sur l'intelligence artificielle et la cybersécurité fait par IA."
+    description: "Briefing quotidien de veille sur l'intelligence artificielle et
+      la cybersécurité fait par IA."
     language: fr-FR
     author: "AI News"
     category: Technology

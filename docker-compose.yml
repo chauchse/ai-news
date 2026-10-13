@@ -126,6 +126,8 @@ services:
       RECIPIENT: ${RECIPIENT:-}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      FEEDBACK_URL: ${FEEDBACK_URL:-}
+      FEEDBACK_SIGNING_SECRET: ${FEEDBACK_SIGNING_SECRET:-}
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./output:/output

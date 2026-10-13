@@ -91,13 +91,14 @@ PostgreSQL et Ollama restent démarrés. Les autres services s’exécutent à l
 
 ### 3. Initialiser le schéma SQL
 
-Compose ne monte pas de scripts d’initialisation PostgreSQL. Sur une base neuve, appliquer les quatre fichiers dans l’ordre :
+Compose ne monte pas de scripts d’initialisation PostgreSQL. Sur une base neuve, appliquer les cinq fichiers dans l’ordre :
 
 ```bash
 for sql in app/sql/001_initial_schema.sql \
            app/sql/002_normalized_content.sql \
            app/sql/003_article_scoring.sql \
-           app/sql/004_unique_articles.sql; do
+           app/sql/004_unique_articles.sql \
+           app/sql/005_feedback.sql; do
   docker compose exec -T postgres sh -c \
     'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$sql" || break
 done
@@ -356,11 +357,45 @@ La configuration `briefing.briefing.history.days` règle la fenêtre (7 par déf
 
 ## Votes et apprentissage personnalisé
 
-**État actuel : cette fonction a été testée dans une version précédente, mais
-son code n’est plus présent dans ce dépôt.** Lors de la centralisation de la
+**État actuel : les boutons du mail sont rétablis ; les données et leur schéma
+sont conservés, mais la collecte locale et la personnalisation restent absentes.** Lors de la centralisation de la
 configuration, la version V2 sans les modules `feedback/` et `web/` a été retenue.
 Le pipeline actuel ne collecte donc pas les votes et n’apprend pas à partir d’eux.
 Reconstruire les images ne rétablit pas cette fonction.
+
+### Boutons du mail rétablis le 13 octobre 2026
+
+Le mailer ajoute six boutons signés sous chaque news principale, en HTML et en
+texte, si `FEEDBACK_URL` et `FEEDBACK_SIGNING_SECRET` sont transmis depuis `.env`.
+Le secret existant doit correspondre au PHP distant (au moins 32 octets) : ne pas
+le remplacer. Le protocole signé V1 reprend celui de la branche V3 historique.
+Reconstruire uniquement `docker compose --profile mail build mailer`, puis vérifier
+avec `mailer --dry-run` via Compose avant le prochain envoi autorisé.
+Aucun envoi ni déploiement distant n’a été effectué pour cette restauration.
+
+Les anciens marqueurs sont respectés. Sans marqueur, l’identité est calculée
+à partir des URL sources triées et de la date inscrite dans le briefing : mêmes
+sources et même jour donnent la même présentation EN/FR, indépendamment du titre.
+Cette identité ne fusionne pas des événements aux sources différentes ; elle ne
+rétablit pas la traçabilité PostgreSQL des nouveaux candidats ni leur import.
+Les Markdown figés, annexes, marqueurs de reprise et votes existants sont préservés.
+Le rendu ne fait aucun accès réseau, SQL ou modèle ; il utilise uniquement la
+bibliothèque standard et les dépendances déjà présentes du mailer.
+
+Réglages facultatifs dans la section `mail` du `config.yaml` principal :
+`feedback: {enabled: false, link_days: 90}` pour désactiver les boutons ; sans ce
+bloc, ils sont actifs lorsque l’URL est renseignée. L’expiration dépend du jour du
+briefing, jusqu’à la fin du 90e jour suivant, et les éditions expirées sont refusées.
+Le fichier actuel appartenant à root, aucun réglage n’y a été ajouté lors de ce
+correctif. Une configuration incomplète avec URL renseignée interrompt le rendu.
+Retour arrière : retirer `FEEDBACK_URL` de l’environnement mailer ou désactiver
+`mail.feedback.enabled`, sans effacer de données ni de marqueurs.
+Le mode de confirmation reste celui du PHP distant : GET sans vote par défaut ;
+l’essai `require_confirmation=false` peut recevoir des votes de scanners mail.
+Vérifications locales : 47 tests réussis (dont 13 tests mail), validation Compose
+`config --quiet` réussie ; aucune inférence réelle ni envoi SMTP. La disponibilité
+du récepteur distant et l’enregistrement réel des nouveaux votes n’ont pas été
+vérifiés dans cette intervention.
 
 ### Le flux prévu et testé précédemment
 
@@ -411,18 +446,120 @@ d’entraînement manquaient. Après nettoyage des artefacts de développement, 
 correspondances des 14 présentations, les deux Markdown de test et les quatre
 rapports sont archivés dans PostgreSQL : `feedback_runs`,
 `kind = 'legacy_test_archive'`, `id = 3`, colonne JSONB `report`.
-Les 13 votes restent dans `feedback_returns`. Cet archivage préserve les données
-mais ne rattache pas les candidats et ne rend pas les exemples entraînables.
+L’import depuis cette archive a ensuite créé 1 briefing, 14 événements,
+14 présentations communes FR/EN, 14 liens vers les articles et 4 rapports séparés.
+Les 13 votes sont maintenant rattachés, sans retour non résolu. Les textes publiés
+sont dans `feedback_candidates.snapshot.published_editions` ; les rapports sont
+dans `feedback_runs` avec `kind = 'legacy_test_report'`.
+Les caractéristiques absentes ne sont pas inventées : `assessment` reste vide et
+les instantanés sont marqués `retrospective` et `test_only`. Ils ne sont donc pas
+encore prêts pour l’entraînement. L’import est transactionnel et idempotent :
+sa seconde exécution n’a créé aucune donnée métier supplémentaire.
 Les mails, scripts temporaires, paquets de déploiement et sauvegardes de migration
 ont été supprimés ; les 30 fichiers de `output/daily/` sont inchangés.
 
-Pour reprendre cette fonction, il faut réintégrer son code et sa migration,
-adapter ses réglages au `config.yaml` global, rattacher les présentations de test,
-puis vérifier la boucle complète. La configuration PHP privée et les JSON déployés
+Pour relancer cet import explicitement, avec `DATABASE_URL` fourni dans l’environnement :
+
+```bash
+python -m app.import_feedback_archive --archive-id 3
+```
+
+Pour reprendre la personnalisation, il faut réintégrer son service, adapter ses
+réglages au `config.yaml` global, puis vérifier la boucle complète. La migration
+`005_feedback.sql` conserve le schéma mais n’active aucun traitement automatique.
+La configuration PHP privée et les JSON déployés
 précédemment restent distincts du dépôt local ; leur état distant n’a pas été
 revérifié pour cette mise à jour documentaire. Le mode testé sans confirmation
 peut enregistrer des visites automatiques de Gmail : ces retours ne doivent pas
 être considérés comme certainement humains.
+
+## Modèle de données PostgreSQL
+
+Schéma vérifié sur la base locale. Les traits pleins indiquent des clés
+étrangères ; les pointillés indiquent des liens applicatifs sans contrainte FK.
+
+```mermaid
+erDiagram
+    sources ||--o{ articles : collecte
+    sources ||--o{ collection_runs : journalise
+    feedback_briefings ||--o{ feedback_candidates : contient
+    feedback_events ||--o{ feedback_candidates : presente
+    feedback_events ||--o{ feedback_aliases : identifie
+    feedback_events ||--o{ feedback_event_articles : regroupe
+    articles ||..o{ feedback_event_articles : "article_id sans FK"
+    feedback_candidates ||..o{ feedback_returns : "presentation_id sans FK"
+
+    sources {
+        bigint id PK
+        text feed_url UK
+        boolean enabled
+    }
+    articles {
+        bigint id PK
+        bigint source_id FK
+        text guid
+        text url
+        text normalized_content
+        float relevance_score
+    }
+    collection_runs {
+        bigint id PK
+        bigint source_id FK
+        text status
+        int articles_inserted
+    }
+    feedback_briefings {
+        text id PK
+        date day
+        jsonb config
+    }
+    feedback_events {
+        text id PK
+    }
+    feedback_candidates {
+        text presentation_id PK
+        text briefing_id FK
+        text event_id FK
+        jsonb snapshot
+        jsonb assessment
+        jsonb editions
+    }
+    feedback_aliases {
+        text alias PK
+        text event_id FK
+    }
+    feedback_event_articles {
+        text event_id PK,FK
+        bigint article_id PK
+        text source_key
+    }
+    feedback_returns {
+        text id PK
+        text submission_id UK
+        text presentation_id
+        text reason
+        timestamptz imported_at
+        jsonb payload
+    }
+    feedback_runs {
+        bigint id PK
+        text kind
+        jsonb report
+    }
+    feedback_cache {
+        text key PK
+        jsonb value
+    }
+```
+
+`unique_articles` est une **vue** qui retient une ligne par GUID.
+`feedback_effective_returns` est une **vue** qui retient le dernier retour par
+présentation selon `(submitted_at, id)`. Aucun lien FK vers les présentations
+n’est imposé aux retours, pour conserver un vote reçu avant son rattachement.
+Les liens vers les articles n’ont pas de FK afin de survivre à leur purge.
+Le couple `(briefing_id, event_id)` est unique ; les éditions FR/EN partagent
+donc une présentation. `feedback_runs` conserve archives et rapports ;
+`feedback_cache` est réservé aux résultats réutilisables des traitements.
 
 ## Configuration globale
 

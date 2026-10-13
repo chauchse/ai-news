@@ -345,3 +345,16 @@ Les 13 votes PostgreSQL sont inchangés. Les 30 fichiers daily sont vérifiés
 identiques par SHA-256. Aucun effet sur l’hébergement public, les secrets .env,
 les modèles ou les volumes. L’archive conserve des données de test, pas des
 caractéristiques antidatées ni des annotations certifiées humaines.
+
+## Import relationnel des archives — 12 octobre 2026
+
+À la demande de l’utilisateur, import de l’archive feedback_runs id 3 dans les
+tables existantes : 1 briefing, 14 événements et présentations EN/FR communes,
+14 liens exacts/canoniques vers les articles et 4 rapports séparés.
+Les 13 votes sont rattachés ; aucun retour non résolu. L’archive originale et
+les votes sont préservés. La seconde exécution ne crée aucun doublon métier.
+Les instantanés sont explicitement rétrospectifs et de test, observés à la date
+réelle d’import ; aucune caractéristique manquante ni évaluation n’est inventée.
+Le schéma SQL 005 est rétabli pour rendre ces tables reproductibles ; cela ne
+rétablit ni le service feedback ni la personnalisation du pipeline actuel.
+Le README documente le modèle PostgreSQL, ses vues et ses liens sans FK.
