@@ -1,5 +1,33 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Une date explicite prépare localement ; les effets externes sont opt-in.
+EDITION_DATE=""
+PREPARE=0
+PUBLISH=0
+SEND_MAIL=0
+while (($#)); do
+    case "$1" in
+        --date) [[ $# -ge 2 ]] || { echo 'Date manquante' >&2; exit 2; }; [[ -n "$2" ]] || { echo 'Date vide' >&2; exit 2; }; EDITION_DATE="$2"; shift 2 ;;
+        --prepare) PREPARE=1; shift ;;
+        --publish) PUBLISH=1; shift ;;
+        --send-mail) SEND_MAIL=1; shift ;;
+        *) echo "Argument inconnu : $1" >&2; exit 2 ;;
+    esac
+done
+if [[ -n "$EDITION_DATE" ]]; then
+    python3 - "$EDITION_DATE" <<'PYDATE'
+import sys
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+value = sys.argv[1]
+day = date.fromisoformat(value)
+if day.isoformat() != value or day >= datetime.now(ZoneInfo('Europe/Paris')).date():
+    raise SystemExit('La date doit être passée, au format AAAA-MM-JJ')
+PYDATE
+    PREPARE=1
+elif ((PUBLISH || SEND_MAIL)); then
+    echo '--publish et --send-mail nécessitent --date' >&2; exit 2
+fi
 # Journaliser stdout et stderr, y compris les erreurs précoces et les sous-processus.
 LOG_FILE=/var/log/ai-news.log
 if [[ ! -e "$LOG_FILE" ]]; then
@@ -25,7 +53,7 @@ for service in collector embeddings audio podcast mailer; do
 done
 ENGINE=$("${COMPOSE[@]}" run --rm -T --no-deps --entrypoint python audio -m project_config audio engine)
 [[ "$ENGINE" == kokoro ]] || { log 'Le pipeline quotidien exige Kokoro'; exit 1; }
-TODAY=$(date +%F)
+TODAY=${EDITION_DATE:-$(date +%F)}
 STATE="output/daily/$TODAY"
 mkdir -p "$STATE/en" "$STATE/fr"
 # Reprendre les résultats de l'ancien layout sans renvoyer les mails.
@@ -51,11 +79,18 @@ fi
 # Une seule sélection multilingue et une seule série de synthèses Qwen.
 # Les deux Markdown sont figés pour les reprises de la même journée.
 if [[ ! -f "$STATE/generated" ]]; then
+    if [[ -z "$EDITION_DATE" ]]; then
     log 'Collecte et scoring'
     "${COMPOSE[@]}" run --rm -T collector
     "${COMPOSE[@]}" run --rm -T collector python -m app.scorer
+    fi
+    if [[ -n "$EDITION_DATE" && ( -s "$STATE/en/briefing.md" || -s "$STATE/fr/briefing.md" ) ]]; then
+        log 'Markdown existant sans marqueur generated : vérifier les deux éditions avant toute reprise'
+        exit 1
+    fi
     log 'Génération des éditions EN puis FR'
     "${COMPOSE[@]}" run --rm -T \
+        -e BRIEFING_DATE="$EDITION_DATE" \
         -e BRIEFING_DAILY_DIR="/output/daily/$TODAY" \
         embeddings python -m embeddings.briefing
     for language in en fr; do
@@ -67,9 +102,12 @@ for language in en fr; do
     log "Édition $language"
     edition="$STATE/$language"
     container_dir="/output/daily/$TODAY/$language"
-    if [[ ! -f "$edition/mail.done" ]]; then
+    if ((PREPARE && !SEND_MAIL)); then
         "${COMPOSE[@]}" run --rm -T mailer --language "$language" \
-            --input "$container_dir/briefing.md" --preview "$container_dir/briefing-email.html"
+            --input "$container_dir/briefing.md" --preview "$container_dir/briefing-email.html" --date "$TODAY" --dry-run
+    elif [[ ! -f "$edition/mail.done" ]]; then
+        "${COMPOSE[@]}" run --rm -T mailer --language "$language" \
+            --input "$container_dir/briefing.md" --preview "$container_dir/briefing-email.html" --date "$TODAY"
         touch "$edition/mail.done"
     elif [[ ! -s "$edition/briefing-email.html" ]]; then
         "${COMPOSE[@]}" run --rm -T mailer --language "$language" \
@@ -82,7 +120,9 @@ for language in en fr; do
         test -s "$edition/$TODAY-briefing.mp3"
         touch "$edition/audio.done"
     fi
-    if [[ ! -f "$edition/podcast.done" ]]; then
+    if ((PREPARE && !PUBLISH)); then
+        log "Podcast $language préparé localement ; aucun transfert"
+    elif [[ ! -f "$edition/podcast.done" ]]; then
         "${COMPOSE[@]}" run --rm -T podcast --language "$language" --date "$TODAY"
         touch "$edition/podcast.done"
     elif [[ ! -s "$edition/podcast.xml" ]]; then

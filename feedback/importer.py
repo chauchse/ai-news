@@ -3,7 +3,7 @@ import json
 import urllib.request
 from contextlib import contextmanager
 
-from mailer.feedback_links import canonical, endpoint, validate_return
+from mailer.feedback_links import canonical, endpoint, validate_return, NEWSLETTER_REASONS
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -37,7 +37,7 @@ class Client:
 
 def same_submission(a, b):
     # received_at may change if an old POST is replayed after the public purge.
-    return all(a.get(k) == b.get(k) for k in ('id','schema_version','submission_id','presentation_id','reason','submitted_at'))
+    return all(a.get(k) == b.get(k) for k in ('id','schema_version','submission_id','presentation_id','reason','submitted_at','briefing_date'))
 
 
 class Store:
@@ -65,18 +65,27 @@ class Store:
         with self.conn.transaction():
             with self.conn.cursor() as cur:
                 for row in rows:
-                    cur.execute('SELECT payload FROM feedback_returns WHERE id=%s OR submission_id=%s',
+                    newsletter = row['reason'] in NEWSLETTER_REASONS
+                    table = 'feedback_newsletter_returns' if newsletter else 'feedback_returns'
+                    cur.execute(f'SELECT payload FROM {table} WHERE id=%s OR submission_id=%s',
                                 (row['id'], row['submission_id']))
                     old = cur.fetchone()
                     if old:
                         if not same_submission(old[0], row):
                             continue # Preserve conflicting public record; do not acknowledge it.
                     else:
-                        cur.execute('''INSERT INTO feedback_returns
-                            (id,submission_id,presentation_id,reason,submitted_at,received_at,payload)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s)''',
-                            (row['id'],row['submission_id'],row['presentation_id'],row['reason'],
-                             row['submitted_at'],row['received_at'],Jsonb(row)))
+                        if newsletter:
+                            cur.execute('''INSERT INTO feedback_newsletter_returns
+                                (id,submission_id,presentation_id,briefing_date,reason,submitted_at,received_at,payload)
+                                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)''',
+                                (row['id'],row['submission_id'],row['presentation_id'],row['briefing_date'],row['reason'],
+                                 row['submitted_at'],row['received_at'],Jsonb(row)))
+                        else:
+                            cur.execute('''INSERT INTO feedback_returns
+                                (id,submission_id,presentation_id,reason,submitted_at,received_at,payload)
+                                VALUES (%s,%s,%s,%s,%s,%s,%s)''',
+                                (row['id'],row['submission_id'],row['presentation_id'],row['reason'],
+                                 row['submitted_at'],row['received_at'],Jsonb(row)))
                         inserted += 1
                     accepted.append(row['id'])
         # Transaction has committed before IDs leave this method.

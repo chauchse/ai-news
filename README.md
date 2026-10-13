@@ -2,6 +2,15 @@
 
 Veille RSS/Atom sur l’IA, l’IT, la cybersécurité et les risques, avec un contexte métier de casino physique au Luxembourg. Le projet produit un briefing français, un MP3 et, en option, un podcast publié par SFTP.
 
+
+La documentation du projet est centralisée dans ce README : fonctionnement,
+commandes, tests, limites, cadrage historique et consignes de travail. Ne pas
+créer d’autre fichier Markdown de documentation ni de dossier `docs/`.
+
+Accès directs : [rétropublication](#retropublication),
+[notation globale](#notation-newsletter), [cadrage historique](#cadrage-historique),
+[consignes de travail](#consignes-projet).
+
 ## Flux de traitement
 
 ```text
@@ -91,14 +100,15 @@ PostgreSQL et Ollama restent démarrés. Les autres services s’exécutent à l
 
 ### 3. Initialiser le schéma SQL
 
-Compose ne monte pas de scripts d’initialisation PostgreSQL. Sur une base neuve, appliquer les cinq fichiers dans l’ordre :
+Compose ne monte pas de scripts d’initialisation PostgreSQL. Sur une base neuve, appliquer les six fichiers dans l’ordre :
 
 ```bash
 for sql in app/sql/001_initial_schema.sql \
            app/sql/002_normalized_content.sql \
            app/sql/003_article_scoring.sql \
            app/sql/004_unique_articles.sql \
-           app/sql/005_feedback.sql; do
+           app/sql/005_feedback.sql \
+           app/sql/006_newsletter_feedback.sql; do
   docker compose exec -T postgres sh -c \
     'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$sql" || break
 done
@@ -427,6 +437,17 @@ consulté et aucun lien GET n’a été suivi, car il pourrait enregistrer un vo
 
 ### Le flux prévu et testé précédemment
 
+Récupération manuelle du 13 octobre 2026 : l’importeur `feedback/importer.py`
+a récupéré et stocké 13 nouveaux retours dans PostgreSQL via son port local
+publié, puis confirmé ces 13 identifiants au PHP pour leur purge distante.
+Aucun retour invalide, conflit ni erreur de confirmation signalé. Les votes
+effectifs après import sont au nombre de 24 ; les clics du mode GET peuvent
+provenir de scanners et ne constituent pas tous des annotations humaines.
+Cette récupération ponctuelle ne réactive pas l’import quotidien automatique.
+Les secrets sont chargés depuis `.env` sans affichage. Aucun mail, modèle,
+marqueur quotidien ni briefing n’a été modifié. L’import conserve l’historique :
+aucune suppression locale n’est nécessaire pour revenir au pipeline habituel.
+
 ```text
 Bouton sous une news dans le mail
   → PHP public : réception du motif signé
@@ -729,3 +750,777 @@ docker compose exec -T postgres sh -c \
 Autres limites à garder en tête : les articles sans date de publication sont exclus du briefing ; la vue SQL déduplique uniquement par GUID ; les évaluations Qwen sont répétées à chaque exécution. Les résumés et priorités produits par les modèles demandent une vérification des sources avant une décision opérationnelle.
 
 Documentation vérifiée par lecture du code. L’exécution complète PostgreSQL/Ollama/traduction/audio/SFTP n’a pas été relancée pour cette revue.
+
+<a id="retropublication"></a>
+
+## Éditions rétrospectives
+
+`run-daily.sh --date AAAA-MM-JJ` prépare une édition passée à partir des articles
+actuellement disponibles et scorés en base. La sélection couvre la journée civile
+Europe/Paris, borne initiale incluse, minuit suivant exclu (23/25 heures lors des
+changements d’heure). Elle utilise `published_at`, sans exclure les articles
+collectés après cette journée. Les dates absentes restent exclues ; une date RSS
+incorrecte reste une limite de la source. Le contenu, les scores, les modèles et
+la configuration sont ceux disponibles aujourd’hui, pas un instantané historique.
+
+La collecte et le scoring ne sont pas relancés en mode rétrospectif. La base doit
+avoir été alimentée auparavant. Le filtre historique lit uniquement les éditions
+antérieures à la date demandée. Préparer plusieurs jours dans l’ordre chronologique.
+Les éditions ultérieures déjà figées ne sont pas réécrites et peuvent partager un
+événement avec une édition ajoutée après coup.
+
+### Commandes
+
+Reconstruire les images concernées :
+
+```bash
+docker compose --profile ai --profile mail build embeddings audio podcast mailer
+```
+
+Préparer les deux langues : modèles locaux, Markdown, aperçus HTML et MP3, sans
+SMTP ni SFTP. Le script utilise son verrou et son journal habituels et peut donc
+nécessiter les droits d’exploitation déjà utilisés pour le lancement quotidien.
+
+```bash
+sudo ./run-daily.sh --date 2026-10-12
+```
+
+Résultats : `output/daily/2026-10-12/{en,fr}/`. La génération porte sa date d’édition
+et la mention rétrospective. `generated` et `audio.done` permettent la reprise ;
+les aperçus n’inscrivent pas `mail.done` ni `podcast.done`. Des Markdown présents
+sans `generated` provoquent un arrêt : vérifier les deux éditions avant de rétablir
+ce marqueur, sans supprimer les fichiers pour contourner le contrôle.
+
+Vérifier le RSS local, sans transfert (écrit `podcast.xml`) :
+
+```bash
+docker compose --profile ai run --rm -T podcast --language fr --date 2026-10-12 --dry-run
+docker compose --profile ai run --rm -T podcast --language en --date 2026-10-12 --dry-run
+```
+
+Publier explicitement les deux podcasts, sans envoi de mail :
+
+```bash
+sudo ./run-daily.sh --date 2026-10-12 --publish
+```
+
+Ajouter `--send-mail` pour envoyer aussi les mails. Chaque étape externe respecte
+son marqueur existant. Sans `--date`, le pipeline conserve son fonctionnement
+quotidien ; `--prepare` permet de préparer le jour courant sans envoi ni transfert.
+
+Le podcast distingue la date d’édition (titre et nom MP3) de la date réelle de
+publication (`pubDate`). La rétention reste basée sur la journée réelle et la date
+d’édition : publication refusée si l’édition est hors fenêtre, sept jours par défaut.
+Une édition plus ancienne peut être générée localement. La republier avec le même
+MP3 et la même date ne crée pas un nouvel épisode et conserve sa date de publication.
+Les liens de feedback suivent la date d’édition et leur expiration habituelle ;
+une édition très ancienne peut donc avoir des liens expirés.
+
+### Tests et limites de validation
+
+Tests sans modèles, SMTP, SFTP ni base réelle :
+
+```bash
+python3 -m venv /tmp/ai-news-retro-tests
+/tmp/ai-news-retro-tests/bin/pip install numpy PyYAML ruamel.yaml 'psycopg[binary]' paramiko Markdown bleach
+/tmp/ai-news-retro-tests/bin/python -m unittest discover -s tests -v
+bash -n run-daily.sh
+git diff --check
+```
+
+Validation locale effectuée : 55 tests réussis, syntaxe Bash, compilation Python,
+`git diff --check` et `docker compose --profile ai --profile mail config --quiet`.
+Le test du script utilise Docker simulé dans un dossier temporaire ; il vérifie
+préparation, reprise et effets externes explicitement demandés.
+
+Les tests couvrent les fenêtres SQL historiques et actuelles, les passages
+été/hiver, l’objet mail, la rétention et la reprise RSS, ainsi que les tests
+existants. Ils ne valident pas une synthèse réelle, la qualité éditoriale ou une
+publication distante. Une préparation locale appelle les modèles et consomme
+CPU/RAM ; ce n’est pas un test unitaire.
+
+### Retour arrière
+
+Conserver une copie des fichiers modifiés avant déploiement et des historiques
+`podcast/state/episodes-*.json` avant toute publication réelle. Restaurer le code
+précédent et reconstruire les images concernées pour revenir au fonctionnement
+antérieur. Préserver les dossiers quotidiens, marqueurs et volumes. Un mail envoyé
+ne peut pas être rappelé ; restaurer un état local RSS ne restaure pas le serveur
+distant et nécessite une opération de publication distincte.
+
+
+<a id="notation-newsletter"></a>
+
+## Appréciation de l’équilibre quotidien
+
+Trois boutons en fin de mail : **Équilibrée**, **Trop cyber**, **Trop IA**.
+L’édition anglaise affiche les mêmes choix traduits. Aucun commentaire requis.
+Les six motifs sous chaque article restent inchangés.
+
+### Contrat et conservation
+
+L’identité globale est le SHA-256 du JSON canonique
+`{"briefing_date":"AAAA-MM-JJ","scope":"newsletter-feedback-v1"}`.
+Elle est commune EN/FR ; une correction remplace le choix effectif de cette journée,
+avec conservation de toutes les soumissions. L’absence de réponse reste inconnue.
+Le vote « trop cyber » ne signifie pas que chacun des articles cyber est inutile.
+Aucun changement automatique de sélection ou entraînement n’est introduit.
+
+Les motifs sont `newsletter_balanced`, `newsletter_too_cyber`, `newsletter_too_ai`.
+Le protocole signé V1 ajoute `briefing_date` uniquement pour ces motifs : les
+anciens payloads d’article et leurs signatures sont inchangés. Une date qui ne
+correspond pas à l’identité est refusée. Le PHP limite la page de correction aux
+trois choix globaux, ou aux six motifs d’article selon le lien ouvert.
+
+Les JSON publics individuels, temporaires et privés, utilisent la même file
+pull/ack. L’importeur stocke les votes globaux dans `feedback_newsletter_returns`,
+les votes d’article dans `feedback_returns`. Une transaction est validée avant
+confirmation des identifiants ; répétitions connues acceptées sans doublon,
+conflits non confirmés. `feedback_effective_newsletter_returns` expose le dernier
+choix par identité, ordonné par date de soumission puis identifiant. Le mode POST
+permet une correction chronologique ; en mode GET direct, plusieurs motifs de la
+même journée ont une date de lien identique et leur ordre de clic n’est pas connu.
+Le lien « Modifier mon choix » passe par une nouvelle confirmation POST.
+
+GET demande confirmation par défaut. L’option privée historique
+`require_confirmation=false` conserve le mode GET direct expérimental : les
+scanners mail peuvent alors voter. Les secrets et la configuration privée restent
+hors racine Web. L’expiration suit `mail.feedback.link_days` (90 jours par défaut),
+qui doit correspondre à `link_seconds` du PHP pour le mode direct.
+
+### Activation
+
+Le récepteur de référence est `web/public/feedback.php` de la branche GitHub
+`main`, récupéré sans fusion ni changement de branche. Il est identique au
+récepteur historique avant cette extension.
+
+L’activation est distincte de la préparation du code ; aucun déploiement effectué.
+Le fichier global actuellement détenu par root n’a pas été modifié.
+
+1. Sauvegarder le PHP actuellement déployé, son chemin de configuration privée et
+   la base locale. Ne pas remplacer les secrets existants par ceux d’un exemple.
+2. Appliquer la migration additive, sans toucher aux tables d’article :
+
+```bash
+docker compose exec -T postgres sh -c \
+  'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  < app/sql/006_newsletter_feedback.sql
+```
+
+3. Mettre à jour le récepteur avec `web/public/feedback.php`, en conservant son
+   accès à la configuration privée existante (`FEEDBACK_PRIVATE_CONFIG` ou
+   constante `PRIVATE_CONFIG`). L’exemple `web/private.example/config.php` n’est
+   pas destiné à écraser une configuration en service. Garder `pending`, fichiers
+   temporaires et verrou hors racine Web. Vérifier PHP >= 8.1.
+4. Utiliser l’importeur mis à jour avant de récupérer les nouveaux votes. La
+   synchronisation reste manuelle dans cette version ; aucun cron n’est ajouté.
+5. Ajouter au bloc `mail` du **config.yaml principal**, avec les droits adaptés :
+
+```yaml
+  feedback:
+    newsletter_enabled: true
+```
+
+Conserver les éventuelles options `enabled` et `link_days` déjà présentes.
+Reconstruire le mailer et générer un aperçu séparé à partir du Markdown figé :
+
+```bash
+docker compose --profile mail build mailer
+docker compose --profile mail run --rm -T mailer --language fr \
+  --input /output/daily/2026-10-13/fr/briefing.md \
+  --preview /output/newsletter-feedback-preview-fr.html --dry-run
+```
+
+Cette commande n’envoie rien. Ne pas suivre les liens du véritable récepteur pour
+un contrôle automatique : en mode direct, une visite enregistre un vote.
+L’ajout ne modifie pas les mails déjà envoyés, Markdown figés ou marqueurs.
+
+### Vérification locale
+
+```bash
+/tmp/ai-news-tests-venv/bin/python -m unittest discover -s tests -v
+php -l web/public/feedback.php
+```
+
+Le test HTTP réel utilise uniquement un serveur PHP sur loopback, des secrets
+fictifs et un répertoire temporaire ; il est ignoré si PHP est absent. Pour un
+binaire hors PATH, définir `AI_NEWS_TEST_PHP=/chemin/php`.
+Le test PostgreSQL optionnel crée une base temporaire indépendante ; fournir
+`AI_NEWS_TEST_PG_BIN` (répertoire initdb/pg_ctl) et `AI_NEWS_TEST_PG_SHARE`
+(répertoire postgres.bki). Le runtime PostgreSQL doit être utilisable sans root.
+
+Validation effectuée : 63 tests réussis, dont PHP 8.3 réel (confirmation, correction,
+pull, ack, compatibilité article, mode direct, rejouabilité et signature invalide)
+et PostgreSQL 16 temporaire (migration rejouée, séparation des tables, dernier
+choix et rollback). Compilation Python et syntaxe PHP validées. Aucun accès au
+récepteur distant ni à PostgreSQL de production ; Docker est inaccessible avec
+les droits de cette session. PHP 8.4 de l’hébergement reste à vérifier sur place.
+
+### Retour arrière
+
+Passer `mail.feedback.newsletter_enabled` à false arrête les nouveaux boutons,
+sans supprimer les votes. Conserver le PHP et l’importeur compatibles pour traiter
+les liens déjà envoyés et les retours encore en attente. Les nouvelles tables
+peuvent rester en place ; ne pas les supprimer. Pour restaurer complètement
+l’ancien PHP, attendre l’expiration des nouveaux liens ou accepter explicitement
+qu’ils ne fonctionneront plus. Aucun mail de renvoi n’est automatique.
+
+
+<a id="cadrage-historique"></a>
+
+## Cadrage historique et propositions
+
+Les éléments ci-dessous conservent les constats et décisions datés des 12 et
+13 octobre 2026. Les descriptions historiques ne constituent pas un inventaire
+actuel : vérifier le code et les sections opérationnelles précédentes. Les
+propositions non validées conservent ce statut.
+
+<details>
+<summary>Consulter le cadrage historique complet</summary>
+
+## Cadrage du projet AI News
+
+Date de référence : 12 octobre 2026. Ce document distingue le fonctionnement
+existant, les exigences exprimées et les pistes de conception. Une piste décrite
+ici ne constitue pas une fonctionnalité livrée ni une autorisation de déploiement.
+
+### Sources et portée
+
+- [README.md](README.md) : documentation du fonctionnement et de l'exploitation.
+- Échange visible du 12 octobre 2026 : analyse des doublons, votes par motif,
+  apprentissage personnalisé et obligation de modèles locaux.
+- [Historique de chat indiqué par l'utilisateur](https://chatgpt.com/c/6aaa190a-4cb4-83eb-ab3e-1db2a14f2e14).
+  Accès tenté le 12 octobre 2026 : seule une page de connexion était accessible.
+  Son contenu non visible n'a pas été lu directement. L'utilisateur a ensuite
+  fourni un texte de cadrage issu de ce chat ; ce texte a été lu et fusionné
+  dans les présents documents. Ses constats historiques ne constituent pas une
+  vérification de l'état actuel du serveur.
+- Code et configurations du dépôt consultés pendant l'analyse. En cas d'écart
+  avec le README, vérifier le code et documenter l'écart sans modifier le
+  fonctionnement implicitement.
+
+### Finalité
+
+Produire une veille utile sur l'IA, l'IT, la cybersécurité et les risques, destinée
+à un professionnel de la technologie travaillant notamment pour un casino
+physique au Luxembourg. Améliorer progressivement le choix des événements à
+partir de retours explicites, en comprenant les motifs d'inutilité sans réduire
+automatiquement la veille aux seuls sujets directement liés au casino.
+
+Le profil éditorial précis doit être affiné par les retours. Ne pas confondre
+importance générale d'une actualité, proximité thématique et utilité personnelle.
+
+Le lectorat est technique et décisionnel (CTO/RSSI). La veille doit laisser une
+place substantielle à l'IA, à l'IT, au cloud et à la transformation numérique ;
+elle ne doit pas devenir mécaniquement un bulletin de vulnérabilités. Le contexte
+casino physique ne doit être confondu ni avec les jeux vidéo ni avec le casino
+en ligne. Le français naturel et agréable à écouter reste une priorité, tout
+en préservant les deux éditions EN/FR actuellement implémentées.
+
+### Contraintes validées
+
+- Rester dans le projet `/opt/ai-news` et son architecture exploitable sur le
+  serveur de l'utilisateur.
+- Exécuter localement les modèles de raisonnement, les embeddings, les
+  entraînements et la sélection. Aucune API d'IA externe pour ces traitements.
+- Les téléchargements initiaux de modèles et dépendances restent compatibles
+  avec cette contrainte, comme dans l'installation actuelle.
+- La collecte RSS, SMTP et SFTP demeurent des échanges réseau nécessaires au
+  produit ; « modèles locaux » ne signifie pas fonctionnement intégral hors ligne.
+- Proposer des boutons par raison sous chaque news du mail. Aucun commentaire
+  ni champ libre ne doit être nécessaire pour donner un retour.
+- Envoyer le retour avec un identifiant de news à une page web sur l'hébergement
+  du podcast.
+- Avant le briefing suivant, récupérer les retours, les conserver localement,
+  puis purger les retours distants importés sans perte.
+- Exploiter les retours par une analyse et un apprentissage mesurables, au-delà
+  d'un simple ajout de mots-clés ou de consignes au prompt.
+- L'absence de vote n'est ni un avis favorable ni un avis défavorable.
+
+### Fonctionnement existant
+
+Le pipeline Docker Compose collecte et normalise RSS/Atom, stocke les articles
+dans PostgreSQL, calcule un score historique, puis regroupe et sélectionne les
+événements avec MiniLM et Qwen via Ollama. Qwen synthétise en anglais ; MarianMT
+et le glossaire produisent le français. Kokoro génère les MP3 ; SMTP envoie les
+mails ; SFTP publie les podcasts et leurs flux RSS.
+
+- `run-daily.sh` prépare les deux Markdown puis traite les éditions EN et FR.
+- `output/daily/AAAA-MM-JJ/{en,fr}/` conserve les fichiers et marqueurs de reprise.
+- La sélection du jour est figée pour les reprises ; préserver cette propriété.
+- Les événements des sept jours précédents sont contrôlés à partir des Markdown.
+- La vue `unique_articles` déduplique par GUID, pas par identité d'événement.
+- Le pipeline historique ne conserve pas les évaluations Qwen en base.
+  La nouvelle traçabilité optionnelle les conserve après activation et migration.
+- Au début de l’analyse, aucune collecte de votes ni chaîne d’apprentissage
+  personnalisé n’était livrée. Le code est désormais préparé, désactivé par
+  défaut ; voir les sections de ce README consacrées au feedback pour ses fonctions testées et limites.
+- La publication SFTP ne prouve pas la disponibilité d'un moteur web dynamique.
+
+Modèles observés : `qwen2.5:3b`,
+`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`,
+`Helsinki-NLP/opus-mt-en-fr` et Kokoro. Les alternatives audio documentées sont
+optionnelles ; ne pas les substituer implicitement au pipeline quotidien.
+
+Limites mémoire Compose observées : embeddings 6 Go, Ollama 4 Go, audio 2 Go.
+Ce sont des plafonds de conteneurs, pas l'inventaire physique du serveur.
+Le cadrage fourni par l'utilisateur indique environ **4 vCPU, 8 Go de RAM,
+sans GPU**, sous Ubuntu/Linux. Dimensionner les propositions pour cette enveloppe
+CPU ; confirmer l'inventaire et la mémoire réellement disponible avant de choisir
+ou remplacer un modèle. Les plafonds de conteneurs s'additionnent et peuvent
+dépasser cette RAM : limiter les chargements simultanés. La durée acceptable du
+traitement reste à établir ; une ancienne génération avait pris environ huit
+minutes, sans que cela constitue un engagement de performance actuel.
+
+### Contexte historique fourni et points de vigilance
+
+Les éléments de cette section proviennent du texte transmis par l'utilisateur.
+Ils guident le diagnostic ; ne pas affirmer que les incidents persistent ni que
+les corrections évoquées sont présentes sans vérifier le dépôt et l'exécution.
+
+#### Collecte et diversification
+
+- Le catalogue utilise `sources` et la clé `url`, pas `feed_url`. Le chemin du
+  collecteur est historiquement `/app/config/sources.yaml`, surchargeable par
+  `SOURCES_FILE`. Vérifier montages et chemins propres à chaque service.
+- Une ancienne proposition utilisait à tort `feed_url`. Des logs historiques
+  montraient aussi des tentatives sur des sources déclarées désactivées : vérifier
+  le fichier réellement lu plutôt que présumer un défaut encore présent.
+- Parcourir toutes les sources actives et distinguer articles trouvés, nouveaux,
+  normalisés et éligibles. Zéro article nouvellement normalisé n'établit pas une
+  panne si les articles sont déjà connus.
+- Isoler erreurs HTTP, timeout, XML/Atom invalide et flux vides ; préserver la
+  collecte des autres sources et compter clairement les résultats par source.
+- Incidents rapportés : BleepingComputer 403 ; Sophos timeout ; anciennes URL
+  Azure 404 ; XML invalide pour des URL Qualys, CERT-FR, Channelnews et DeepMind.
+  Toute affirmation de disponibilité actuelle demande une nouvelle vérification.
+- Un diagnostic initial comptait 20 candidats vulnérabilités sur 26 articles
+  exploitables. Diversifier la collecte avant de compenser par des seuils faibles.
+- Répartition indicative historique des sources : IA 35 %, IT/cloud 30 %, cyber
+  20 %, risques/réglementation 10 %, autres 5 %. Ce ne sont ni des quotas de news
+  ni des paramètres approuvés pour l'apprentissage.
+- Sources IA ajoutées ou envisagées : Anthropic, Mistral, Cohere, xAI, Ai2,
+  The Batch, TLDR AI, Turing Blog, AISI, CETaS, Mila, OpenAI, MIT Technology Review.
+  Certaines reposaient sur `alan-turing-institute/ai-rss-feeds` : vérifier la
+  fraîcheur des articles et des flux GitHub, pas seulement leur accessibilité.
+- Sources IT ajoutées ou envisagées : Ars Technica, Hacker News, TechCrunch,
+  The Register, Slashdot, Stratechery, The Next Web, ReadWrite, Google The Keyword,
+  The Verge et Engadget. Ces listes ne garantissent ni activation ni validité.
+  Préférer un catalogue maîtrisé à un import massif OPML ; podcasts tiers et
+  YouTube ne sont pas prioritaires sans transcription.
+- Détecter doublons d'URL, de sources et reprises syndiquées. Reconstruire une
+  image seulement si le fichier modifié y est copié. Ne pas imposer un montage
+  en lecture seule à `sources.yaml` : l'auto-désactivation actuelle écrit ce YAML
+  et peut supprimer les articles associés, comme documenté dans le README.
+
+#### Sélection, identité et dates
+
+- Ne pas compléter artificiellement jusqu'à `max_events` avec des articles faibles.
+  Réallouer les places uniquement vers des sujets pertinents et respecter les
+  plafonds, y compris les règles configurées d'alertes critiques.
+- Distinguer pertinence technologique, importance et pertinence métier. Le casino
+  reste un contexte et un bonus, jamais un filtre exclusif de toute la veille.
+- Objectif éditorial : distinguer domaine principal et nature du risque. Une faille
+  d'agent IA peut être un sujet IA avec un risque sécurité ; l'infrastructure
+  générique n'est pas automatiquement cyber. Le code actuel peut encore appliquer
+  une catégorie sécurité déterministe : ne pas présenter cet objectif comme livré.
+- Dédupliquer entre langues, éditeurs et catégories, y compris l'actualité IA/IT.
+  Un doublon historique concernait un faux signalement de meurtre attribué à un
+  modèle Anthropic. Un test rapporté avait fusionné 26 articles en 21 événements,
+  avec des paires bilingues encore présentes (Python Core, GIMP, Linux, Icinga,
+  Kitty). Ces chiffres ne décrivent pas le briefing courant.
+- Utiliser CVE/ZDI, URL canonique et preuves factuelles, puis similarité et arbitrage
+  local à budget limité ; produit et version seuls ne prouvent pas l'identité.
+- Séparer date de publication, date de l'avis, date de l'événement et réapparition
+  RSS. Des avis d'août avaient figuré dans un briefing d'octobre. Une reprise
+  n'est pas une nouveauté ; une évolution substantielle peut justifier une reprise.
+- Les anciens paramètres `strategic_topic_targets`, `min_business_relevance` et
+  `min_security_business_relevance` ne doivent pas être réintroduits comme des
+  clés actives sans auditer le schéma et leur lecture effective. Des versions
+  anciennes ignoraient certains quotas, poids ou plafonds ; ne pas supposer que
+  ces défauts persistent. Les valeurs courantes sont dans les YAML et le code.
+- Un ancien test avait retenu 4 candidats sur 21 avec pertinence métier à zéro
+  pour tous. Distinguer réponse du modèle, prompt et valeurs de repli avant
+  d'attribuer une cause à des scores nuls.
+
+#### Français, audio et podcast
+
+- Préférer une rédaction fluide, fidèle et prononçable aux traductions littérales.
+  Une révision locale par Qwen des titres français est une piste à mesurer en
+  temps et mémoire, pas un remplacement validé de MarianMT.
+- Vérifier faits, dates, sigles et noms de produits. Ne pas transformer une
+  reformulation éditoriale en affirmation non étayée par le contenu source.
+- Rendre visibles les échecs de synthèse et traduction ; un éventuel repli doit
+  être explicite. Préserver la cohérence des éditions et la reprise des artefacts.
+- Un sommaire historique affichait `Source :` vide ; vérifier le parseur actuel
+  et ses tests avant de corriger. Les champs RSS `description` et `itunes:summary`
+  peuvent légitimement reprendre le même sommaire.
+- Préserver validité XML, échappement, métadonnées, liens et publication d'un
+  audio existant sans nouvelle analyse LLM. La lecture naïve d'un commentaire
+  inline YAML avait causé une panne : vérifier le parseur actuel plutôt que
+  supposer cet incident encore actif.
+
+### Constats de l'analyse du briefing du 12 octobre
+
+Les événements 2 et 3 AMD EPYC / SEV-SNP sont des versions FR et EN du même avis,
+présentes aussi dans le briefing anglais : le doublon précède la traduction.
+Les URL et titres diffèrent ; AMD EPYC n'est pas reconnu par la liste de produits
+de la déduplication complémentaire. Le recouvrement des tokens distinctifs des
+titres vaut 3 mots et environ 33 %, sous les seuils d'arbitrage (4 mots et 65 %)
+et de filtrage final (45 %). Cette paire révèle un angle mort bilingue.
+Il faut préserver la distinction entre avis différents d'un même produit.
+
+Les journaux root et la base Docker n'étaient pas accessibles pendant cette
+analyse. La présence d'identifiants dans les résumés sources et le déroulement
+exact de l'exécution n'ont donc pas été vérifiés.
+
+La sélection actuelle favorise la pertinence technologique et l'importance,
+avec un faible bonus métier. Le prompt rend le lien direct au casino facultatif.
+Le briefing affiche la pertinence métier mais pas le score technologique qui
+contribue fortement au classement. Des news sans utilité personnelle démontrée
+peuvent donc être sélectionnées sans dysfonctionnement du seuil actuel.
+
+### Architecture cible proposée
+
+#### Identité et retours
+
+Créer un identifiant stable d'événement commun aux éditions FR/EN, relié aux
+articles sources, ainsi qu'un identifiant de briefing et de présentation.
+Distinguer une reprise, une traduction et une évolution substantielle.
+
+Motifs désormais validés pour la première version : utile ; hors de mes sujets ; pas applicable
+chez moi ; trop superficiel/promotionnel ; pas assez nouveau ; déjà traité.
+Séparer les signaux de pertinence, de contexte, de substance et de répétition.
+
+Un lien signé associerait le motif à l'événement et au briefing. Prévoir une
+correction de vote sans commentaire obligatoire. La demande d'implémentation
+valide une confirmation POST sans saisie ; une visite GET n'enregistre rien,
+car les robots de messagerie peuvent visiter les liens.
+
+#### Synchronisation
+
+Le serveur du podcast conserve une file temporaire. Le service local récupère
+un lot, l'enregistre durablement avec déduplication par identifiant de retour,
+puis accuse réception des seuls éléments enregistrés. Le serveur ne purge que
+ces éléments confirmés. Préserver les votes arrivés pendant l'import et permettre
+la reprise après panne. L'historique d'apprentissage local doit être indépendant
+de la rétention de sept jours des fichiers podcast.
+
+Architecture validée : un script PHP public sous `/feedback/feedback.php`,
+une configuration et un répertoire de JSON individuels hors racine Web. Aucune
+base distante, aucun cron ni modèle public. Pull authentifié, stockage local
+transactionnel puis ack des seuls identifiants enregistrés. Les corrections
+créent de nouvelles soumissions ; les anciens POST ne changent pas l'ordre local.
+L'utilisateur indique PHP 8.4. HTTPS a répondu lors d'un contrôle sans déploiement ;
+Le dossier `/home/chaucha/podcast/feedback/` est confirmé public par l'utilisateur.
+Le paquet local utilise le privé proposé `/home/chaucha/ai-news-feedback-private/` ;
+son absence d'exposition et ses permissions PHP restent à vérifier sur l'hébergement.
+Les URL de déploiement restent dans `.env` (`FEEDBACK_URL`, `PODCAST_SITE_URL`),
+jamais dans les YAML ; les URL des flux RSS restent dans leur catalogue.
+
+### Apprentissage proposé, non encore validé
+
+1. Conserver un instantané des candidats retenus et écartés : contenu disponible,
+   dates, sources, embeddings, caractéristiques, scores, décisions et versions.
+   Un candidat écarté ne devient pas automatiquement un exemple négatif.
+2. Un modèle de raisonnement local caractérise chaque candidat : sujet, nature,
+   public, utilité opérationnelle, contexte, substance et nouveauté. Associer les
+   caractéristiques aux preuves disponibles ; garder « inconnu » si nécessaire.
+3. Le vote humain fournit l'étiquette. Les interprétations du modèle restent des
+   hypothèses et ne deviennent pas des votes artificiels. Rejeter une anecdote
+   sur Claude ne signifie pas rejeter les usages professionnels de Claude.
+4. Démarrer avec la recherche d'exemples annotés proches. Comparer ensuite une
+   régression logistique régularisée et un CatBoost peu profond exécutés localement.
+   Le choix final dépend des données et du matériel, pas d'une décision acquise.
+5. Prédire séparément utilité, hors sujet, inapplicabilité et manque de substance,
+   sous réserve d'un volume suffisant par motif. Les doublons alimentent un
+   contrôle distinct ; la nouveauté tient compte de l'historique des événements.
+6. Produire un bilan local des erreurs, tendances, incertitudes et changements.
+   Ne pas présenter une contribution statistique comme la cause certaine du vote.
+
+Le démarrage des essais supervisés vers 100 à 200 événements notés est une
+hypothèse de planification. Le fine-tuning d'un grand modèle ou d'un reranker
+n'est pas retenu comme point de départ. Aucun remplacement de Qwen n'est décidé.
+
+### Évaluation proposée, non encore validée
+
+Comparer sélection actuelle, exemples proches, régression logistique et CatBoost
+sur les mêmes informations disponibles au moment de la sélection. Réaliser une
+validation chronologique ; regrouper traductions et reprises d'un même événement
+pour éviter les fuites entre entraînement et test. Recalculer tout prétraitement
+appris uniquement sur les données d'entraînement.
+
+Mesurer votes utiles parmi les articles notés, rejets par motif, classement,
+calibration, diversité et répétitions. Signaler le biais : les articles non
+présentés n'ont généralement pas de vote ; les résultats ne démontrent pas
+automatiquement la qualité sur l'ensemble des candidats.
+
+Un emplacement de découverte par briefing est proposé pour obtenir des retours
+sur des candidats plausibles et incertains, avec journalisation de leur mode de
+sélection. Il n'est pas encore validé.
+
+Déployer d'abord en mode parallèle, puis sur quelques emplacements, puis étendre
+si les mesures confirment l'amélioration. Versionner les modèles, jeux de données,
+caractéristiques et paramètres ; conserver une version de référence et un retour
+arrière. Les seuils évoqués (4 semaines, 100 votes d'évaluation, gain de 10 points
+de votes utiles) sont des propositions à examiner avec l'incertitude statistique,
+pas des conditions d'acceptation approuvées.
+
+### Étapes et questions ouvertes
+
+1. Inventorier le matériel local et les capacités de l'hébergement podcast.
+2. Valider identité, motifs, parcours de vote et protocole de synchronisation.
+3. Livrer traçabilité et collecte ; traiter le défaut bilingue séparément.
+4. Évaluer les caractéristiques et exemples proches sur les premiers retours.
+5. Comparer les modèles supervisés puis activer progressivement le meilleur.
+
+À décider : budget de traitement, modèle local de raisonnement, libellés et
+possibilité de plusieurs motifs, confirmation des votes, durée de conservation
+locale, cadence d'entraînement, comportement en cas d'import indisponible,
+exploration et critères de promotion. Aucune de ces questions ne justifie
+d'introduire implicitement un service d'IA externe.
+
+### Autorisation actuelle
+
+Après la phase d'analyse et de documentation, l'utilisateur a explicitement
+autorisé l'implémentation locale de la boucle complète, ses migrations, tests et
+préparatifs de déploiement. Cette demande ne couvre ni publication distante,
+ni envoi réel de mails, ni modification de planification pour les tests. Les
+fonctions restent désactivées jusqu'à application de la migration et configuration.
+Voir les sections de ce README consacrées au feedback pour les commandes et limites effectives.
+
+#### Essai sans confirmation autorisé
+
+Le 12 octobre 2026, l’utilisateur demande explicitement un essai GET avec vote
+direct, configurable et réversible. Déployé via `require_confirmation => false`
+dans le privé PHP ; true rétablit le comportement initial. Les robots Gmail
+peuvent voter et les clics successifs sur des motifs différents ne constituent
+pas un historique chronologique fiable ; correction explicite POST disponible.
+
+### Centralisation de la configuration — décision du 12 octobre 2026
+
+Pendant l’inventaire, le dépôt est revenu à la version V2 et les modules feedback
+et web ont disparu. L’utilisateur a explicitement confirmé : « Centraliser l’état
+actuel ». Cette migration ne rétablit donc pas ces modules ; les descriptions
+précédentes du feedback restent historiques et ne décrivent pas le code actuel.
+
+Les neuf configurations actives sont réunies dans `config.yaml` commenté à la
+racine. Les valeurs effectives sont conservées, avec suppression d’une répétition
+identique de la clé `patched` du glossaire pour permettre les écritures ruamel.
+Le catalogue est sous `collection`; secrets et URL publiques restent dans `.env`.
+Le lecteur partagé, Docker et les scripts sont adaptés. Les YAML antérieurs sont
+sauvegardés dans `output/config-migration/current-baseline/`. Les nouvelles images
+doivent être reconstruites avant exploitation ; le pipeline les contrôle avant
+ses effets. Aucun mail, podcast, modèle, volume ni planification n’est modifié
+pour tester la migration.
+
+### Nettoyage des artefacts de développement — 12 octobre 2026
+
+À la demande de l’utilisateur, suppression des cinq dossiers temporaires sous
+output : feedback-deploy, feedback-deploy-tools, feedback-email-test,
+feedback-analysis et config-migration. Avant suppression, correspondances des
+14 présentations, deux Markdown et quatre rapports archivés transactionnellement
+dans feedback_runs (kind legacy_test_archive, id 3), puis relus après commit.
+Les 13 votes PostgreSQL sont inchangés. Les 30 fichiers daily sont vérifiés
+identiques par SHA-256. Aucun effet sur l’hébergement public, les secrets .env,
+les modèles ou les volumes. L’archive conserve des données de test, pas des
+caractéristiques antidatées ni des annotations certifiées humaines.
+
+### Import relationnel des archives — 12 octobre 2026
+
+À la demande de l’utilisateur, import de l’archive feedback_runs id 3 dans les
+tables existantes : 1 briefing, 14 événements et présentations EN/FR communes,
+14 liens exacts/canoniques vers les articles et 4 rapports séparés.
+Les 13 votes sont rattachés ; aucun retour non résolu. L’archive originale et
+les votes sont préservés. La seconde exécution ne crée aucun doublon métier.
+Les instantanés sont explicitement rétrospectifs et de test, observés à la date
+réelle d’import ; aucune caractéristique manquante ni évaluation n’est inventée.
+Le schéma SQL 005 est rétabli pour rendre ces tables reproductibles ; cela ne
+rétablit ni le service feedback ni la personnalisation du pipeline actuel.
+Le README documente le modèle PostgreSQL, ses vues et ses liens sans FK.
+
+### Complément demandé le 13 octobre 2026 : équilibre de la newsletter
+
+L’utilisateur demande trois appréciations globales, en complément des votes par
+article : équilibrée, trop cyber, trop IA. L’implémentation locale distingue ces
+retours des annotations d’article et partage leur identité entre EN/FR pour une
+même journée. La collecte seule ne modifie ni quotas ni modèles. Le mailer est
+préparé avec une option désactivée par défaut ; activation après migration locale
+et mise à jour du PHP public. Aucun déploiement distant ni activation effectués.
+
+</details>
+
+<a id="consignes-projet"></a>
+
+## Instructions pour travailler dans AI News
+
+### Contexte à lire
+
+Lire les sections pertinentes du README global avant une analyse ou une
+modification, y compris le cadrage historique lorsqu’il concerne la demande.
+Ce fichier conserve les exigences utilisateur, les limites, les décisions ouvertes
+et décrit l’exploitation. Vérifier les faits techniques dans le code ; signaler les
+écarts. Ne pas présenter une proposition du cadrage comme une fonctionnalité
+existante ou une décision validée.
+
+### Périmètre et autonomie
+
+- Respecter la demande active : une demande d'analyse seule n'autorise pas de
+  modification. La rédaction de documentation n'autorise pas l'implémentation
+  du plan. Une demande ultérieure de développement autorise les travaux locaux
+  nécessaires à son périmètre ; ne pas redemander systématiquement confirmation.
+- Tous les traitements IA et ML du produit doivent s'exécuter sur le serveur de
+  l'utilisateur. Ne pas introduire d'API d'inférence, d'embeddings ou
+  d'entraînement externe, ni lui transmettre articles ou votes.
+- Les échanges RSS, SMTP et SFTP et les téléchargements initiaux documentés ne
+  sont pas interdits par cette exigence de modèles locaux.
+- Vérifier CPU, RAM, GPU éventuel et budget de temps avant de proposer un modèle
+  plus lourd. Le cadrage utilisateur indique environ 4 vCPU, 8 Go de RAM, sans
+  GPU : dimensionner pour CPU et limiter la concurrence et les appels LLM.
+  Les plafonds Compose ne décrivent pas la capacité réelle du serveur.
+- Les URL publiques de déploiement (podcast et feedback) sont définies dans
+  `.env`, pas dans les YAML ni en dur dans le code. Lire `FEEDBACK_URL` pour
+  le feedback ; les URL des flux RSS restent dans leur catalogue de sources.
+- Ne pas lire ou afficher les secrets de `.env`, clés privées ou identifiants
+  dans les sorties, journaux ou documents.
+- Lire les fichiers concernés, les montages Compose, les noms de variables et
+  les schémas avant de modifier. Ne pas supposer un chemin conteneur, une clé
+  YAML ou une commande. Éviter `docker compose config` sans précaution : sa
+  sortie peut contenir les secrets interpolés ; préférer `config --quiet`.
+- Favoriser un correctif ciblé ; ne pas remplacer silencieusement PostgreSQL,
+  MiniLM, Qwen, MarianMT ou Kokoro. Préserver données, volumes et artefacts.
+- Garder les réglages dans les configurations appropriées ; vérifier que les
+  paramètres sont effectivement lus plutôt que simplement ajoutés au YAML.
+- Répondre en français, avec faits, hypothèses et limites distincts. Pour une
+  modification fonctionnelle, fournir vérifications pertinentes, résultats et
+  procédure de retour arrière. Une vérification non exécutée n'est pas validée.
+
+### Repères techniques
+
+- Collecte et scoring : `app/collector.py`, `app/normalizer.py`, `app/scorer.py`.
+- Schéma : `app/sql/` ; `unique_articles` déduplique par GUID seulement.
+- Configuration applicative unique : `config.yaml` à la racine, lue via
+  `project_config.py`. Sélection : `embeddings/briefing.py`, section `briefing`.
+- Profils sémantiques, veille et traduction : sections `semantic_scoring`,
+  `watchlists` et `glossary` de `config.yaml`.
+- Mail : `mailer/send.py` ; podcast : `podcast/publish.py` ; audio : `audio/`.
+- Orchestration : `run-daily.sh`, `docker-compose.yml`, `post-install.sh`.
+- Tests existants : `tests/`. Utiliser les vérifications pertinentes au changement.
+
+### Propriétés à préserver
+
+- Veille technique et décisionnelle IA/IT/cloud/cyber/risques/transformation,
+  avec une place substantielle de l'IA et de l'IT. Ne pas réduire le produit à
+  un bulletin de vulnérabilités ni filtrer exclusivement sur le casino physique.
+- Ne pas confondre casino physique, jeux vidéo et casino en ligne. Séparer
+  pertinence technique, importance et pertinence métier ; ne pas remplir un
+  quota avec des articles faibles ni abaisser aveuglément les seuils.
+- Une sélection commune EN/FR, synthèse anglaise puis traduction française.
+- Français naturel, précis et prononçable, sans invention ; signaler les échecs
+  de traduction/synthèse. Ne pas présenter comme livrée une révision Qwen des
+  titres français seulement envisagée dans le cadrage historique.
+- Conservation des sources et distinction entre faits et triage provisoire.
+- Identité d'événement distincte de la langue, de l'article et de sa présentation.
+- Déduplication prudente : un produit commun ne suffit pas à fusionner des avis ;
+  traiter également le cas des traductions d'un même avis.
+- Reprise quotidienne par dossiers et marqueurs, sans renvoi ou republication
+  implicite. Ne pas supprimer ces marqueurs pour effectuer une vérification.
+- Préserver la sélection figée du jour ; importer les nouveaux votes pour la
+  prochaine sélection, sans régénérer implicitement les éditions déjà envoyées.
+- Fuseau Europe/Paris pour les dates du produit ; cron dépend du fuseau hôte.
+- Distinguer date de l'avis, publication, événement et reprise RSS. Ne pas
+  présenter un avis ancien comme nouveau sans évolution substantielle.
+- Respecter les plafonds configurés. Distinguer domaine et risque lorsque le
+  changement le concerne ; ne pas assimiler systématiquement infrastructure
+  et cybersécurité. La séparation complète domaine/risque reste un objectif.
+- Préserver RSS/XML valide, sources renseignées et métadonnées cohérentes ;
+  le même sommaire dans deux champs RSS n'est pas en soi un doublon d'événement.
+
+### Collecte et diagnostic
+
+Le catalogue utilise `collection.sources[].url`, pas `feed_url`. Vérifier
+`AI_NEWS_CONFIG` et le montage réel (`/workspace/config.yaml` pour le collecteur,
+`/app/config.yaml` pour les autres services). Parcourir toutes les sources actives, isoler les erreurs de
+flux et compter séparément articles trouvés, nouveaux, normalisés et éligibles.
+Zéro nouvelle normalisation ne suffit pas à conclure à une panne.
+
+Les listes de sources, erreurs HTTP/XML et chiffres de tests historiques dans
+la section « Cadrage historique et propositions » ne décrivent pas nécessairement l'état présent. Vérifier avant de
+réannoncer un incident ou d'ajouter une source ; détecter les URL en double et
+les reprises, vérifier la fraîcheur du contenu des flux.
+
+Le collecteur actuel peut écrire `config.yaml` pour désactiver automatiquement
+un flux. Ne pas imposer un montage en lecture seule au collecteur sans tenir compte de cette
+fonction. Toute action sur une source désactivée doit considérer les effets de
+purge décrits dans le README.
+
+### Feedback et apprentissage à venir
+
+Suivre les exigences et le statut des propositions dans la section « Cadrage historique et propositions ».
+Les retours sont des votes par motif, sans commentaire obligatoire. L'absence
+de vote et la non-sélection ne sont pas des étiquettes négatives. Distinguer
+pertinence, contexte, substance, nouveauté et doublon. Ne pas transformer une
+interprétation de LLM en annotation humaine.
+
+Le récepteur validé est PHP + JSON individuels, sans base distante, sous
+`/feedback/`. Configuration, pending, temporaires et verrous sont hors racine
+Web. GET ne vote pas ; confirmation POST sans saisie. Voir les sections de ce README consacrées au feedback
+pour les contrats et commandes. Ne pas remplacer cette architecture par SQLite.
+
+La collecte distante doit être temporaire et l'historique local durable.
+Ne purger que les retours effectivement stockés et confirmés, avec import
+idempotent et prise en compte des corrections. Vérifier les possibilités web
+de l'hébergement ; SFTP seul ne fournit pas un service de collecte.
+
+Évaluer chronologiquement, empêcher les fuites entre reprises/traductions,
+documenter les biais de sélection, et versionner les modèles et données.
+Prévoir un mode parallèle et un retour arrière avant activation. Les méthodes
+et seuils proposés restent à valider, sans supposer un fine-tuning nécessaire.
+
+### Vérifications et effets externes
+
+Privilégier lecture, tests ciblés et aperçus. Le dry-run du briefing appelle les
+modèles locaux ; celui du mail écrit un aperçu ; celui du podcast nécessite les
+artefacts. Ils ne constituent pas tous une simple lecture sans consommation.
+
+`run-daily.sh` et un lancement du service quotidien peuvent collecter, écrire en
+base, envoyer des mails et publier. Le collecteur peut supprimer les articles
+de sources désactivées. Ne pas utiliser ces commandes comme de simples tests.
+Ne pas envoyer de mail, publier ou modifier l'exploitation sans autorisation
+couvrant ces actions. L'absence de droits Docker/root ne justifie pas un
+contournement ; signaler les vérifications impossibles.
+
+Après un changement autorisé, résumer les fichiers modifiés, les vérifications
+effectuées et les limites restantes. À chaque évolution, y compris une étape
+de test ou de préparation, mettre systématiquement à jour le README : expliquer
+brièvement le fonctionnement, l'utilisation et les limites effectives. Garder
+ce document lisible et compréhensible ; intégrer les détails techniques dans
+les sections pertinentes du même README. Ne jamais supprimer le flux de traitement ;
+le conserver et l'actualiser si nécessaire, ainsi que le flux de retour utilisateur.
+Mettre aussi à jour la documentation concernée ; ne pas réécrire l'historique des
+propositions comme si elles avaient été validées dès l'origine.
+
+Conserver un seul fichier Markdown de documentation : README.md à la racine.
+Y intégrer aussi les détails spécialisés, le cadrage et les présentes consignes.
+Ne pas créer de README par module, de Markdown séparé ou de dossier docs/.
+
+Exception validée pour l’essai du 12 octobre 2026 : le PHP public peut voter
+sur GET si sa configuration privée `require_confirmation` vaut false.
+Le défaut reste true ; documenter le risque de scanners et préserver le retour
+arrière par cette option. Cette exception remplace l’exigence GET sans vote
+uniquement pour ce mode explicitement demandé.
+
+### Configuration globale — état actuel validé
+
+L’utilisateur a confirmé de centraliser la version actuelle V2 sans réintroduire
+les modules feedback/web absents de cette version. Tous les réglages applicatifs
+sont dans `config.yaml` à la racine ; ne plus créer de YAML par module.
+Secrets et URL de déploiement restent dans `.env`. Les schémas SQL, manifestes
+Docker et artefacts de modèles ne sont pas des configurations applicatives.
+Lire via `project_config.load_section`, conserver les commentaires et tester
+la désactivation d’une source sans changement des autres sections.
+Le catalogue utilise désormais `collection.sources` et `collection.source_health`.
+Le collecteur lit `/workspace/config.yaml` dans le montage du projet permettant
+son remplacement atomique ; les autres services lisent `/app/config.yaml`.
+Reconstruire toutes les images Python après modification du lecteur partagé.
+Ne pas lancer le pipeline complet pour vérifier cette migration.

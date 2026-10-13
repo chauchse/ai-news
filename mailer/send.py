@@ -15,7 +15,7 @@ import bleach
 import markdown
 import yaml
 from project_config import load_section
-from mailer.feedback_links import MARKER, briefing_entries, links
+from mailer.feedback_links import MARKER, briefing_entries, links, newsletter_identity
 
 
 def address(value):
@@ -99,6 +99,16 @@ def add_feedback(text, cfg):
         label = 'Votre avis' if language == 'fr' else 'Your feedback'
         buttons = '**' + label + '** : ' + ' · '.join('[' + name + '](' + link + ')' for name, link in values)
         blocks[index] = MARKER.sub('', block).rstrip() + '\n\n' + buttons + '\n\n'
+    newsletter_enabled = options.get('newsletter_enabled', False)
+    if type(newsletter_enabled) is not bool:
+        raise ValueError('mail.feedback.newsletter_enabled doit être booléen')
+    if newsletter_enabled:
+        values = links(newsletter_identity(day), url, os.getenv('FEEDBACK_SIGNING_SECRET', ''),
+                       expires, language, briefing_date=day)
+        label = ('Comment trouvez-vous l’équilibre de cette newsletter ?' if language == 'fr'
+                 else 'How balanced is this newsletter?')
+        buttons = '**' + label + '** : ' + ' · '.join('[' + name + '](' + link + ')' for name, link in values)
+        blocks.append('\n\n---\n\n' + buttons + '\n')
     return ''.join(blocks)
 
 
@@ -107,7 +117,8 @@ def build_message(cfg):
     if not text.strip():
         raise ValueError('Briefing Markdown vide')
     text = add_feedback(text, cfg)
-    today = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
+    today = cfg.get('edition_date') or datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
+    datetime.strptime(today, '%Y-%m-%d')
     subject = str(cfg.get('subject', 'AI News — Briefing du {date}')).replace('{date}', today)
     msg = EmailMessage()
     msg['Subject'] = subject
@@ -148,6 +159,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', help='Configuration globale ; défaut : config.yaml / AI_NEWS_CONFIG')
     parser.add_argument('--dry-run', action='store_true', help='Créer un aperçu HTML sans connexion SMTP')
+    parser.add_argument('--date', help='Date de l’édition, AAAA-MM-JJ')
     parser.add_argument('--preview', help='Chemin HTML personnalisé ; sinon briefing-email-<langue>.html')
     parser.add_argument('--language', choices=['en', 'fr'])
     parser.add_argument('--input')
@@ -162,6 +174,8 @@ def main():
             cfg['subject'] = f"[{args.language.upper()}] " + cfg['subject']
         if args.input:
             cfg['input'] = args.input
+        if args.date:
+            cfg['edition_date'] = args.date
         stage = "lecture du Markdown et préparation du message"
         message = build_message(cfg)
         stage = "écriture de l’aperçu HTML"

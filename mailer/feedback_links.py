@@ -13,6 +13,20 @@ LABELS = {
     'fr': ('Utile', 'Hors de mes sujets', 'Pas applicable chez moi', 'Trop superficiel / promotionnel', 'Pas assez nouveau', 'Déjà traité'),
     'en': ('Useful', 'Off topic', 'Not applicable to me', 'Shallow / promotional', 'Not new enough', 'Already covered'),
 }
+NEWSLETTER_REASONS = ('newsletter_balanced', 'newsletter_too_cyber', 'newsletter_too_ai')
+NEWSLETTER_LABELS = {
+    'fr': ('Équilibrée', 'Trop cyber', 'Trop IA'),
+    'en': ('Balanced', 'Too much cybersecurity', 'Too much AI'),
+}
+
+
+def newsletter_identity(day):
+    parsed = datetime.strptime(day, '%Y-%m-%d').date()
+    if parsed.isoformat() != day:
+        raise ValueError('Invalid briefing date')
+    return digest({'scope': 'newsletter-feedback-v1', 'briefing_date': day})
+
+
 ID = re.compile(r'^[a-f0-9]{64}$')
 
 
@@ -57,11 +71,15 @@ def validate_token_payload(p, now=None):
     required = {'v', 'kind', 'presentation_id', 'reason', 'link_id', 'exp'}
     if not isinstance(p, dict) or not required <= p.keys() or p['v'] != 1 or p['kind'] not in ('link', 'form'):
         raise ValueError('Invalid payload')
-    if not valid_id(p['presentation_id']) or not valid_id(p['link_id']) or p['reason'] not in REASONS:
+    if not valid_id(p['presentation_id']) or not valid_id(p['link_id']) or p['reason'] not in REASONS + NEWSLETTER_REASONS:
         raise ValueError('Invalid payload fields')
     if type(p['exp']) is not int or p['exp'] < (time.time() if now is None else now):
         raise ValueError('Expired token')
     allowed = required if p['kind'] == 'link' else required | {'submission_id', 'submitted_at'}
+    if p['reason'] in NEWSLETTER_REASONS:
+        allowed = allowed | {'briefing_date'}
+        if p.get('presentation_id') != newsletter_identity(p.get('briefing_date', '')):
+            raise ValueError('Invalid newsletter identity')
     if set(p) != allowed:
         raise ValueError('Unexpected fields')
     if p['kind'] == 'form':
@@ -78,9 +96,13 @@ def parse_time(value):
 
 def validate_return(row):
     keys = {'schema_version', 'id', 'submission_id', 'presentation_id', 'reason', 'received_at', 'submitted_at'}
+    if isinstance(row, dict) and row.get('reason') in NEWSLETTER_REASONS:
+        keys = keys | {'briefing_date'}
+        if row.get('presentation_id') != newsletter_identity(row.get('briefing_date', '')):
+            raise ValueError('Invalid newsletter identity')
     if not isinstance(row, dict) or set(row) != keys or type(row['schema_version']) is not int or row['schema_version'] != 1:
         raise ValueError('Invalid return schema')
-    if not all(valid_id(row[k]) for k in ('id', 'submission_id', 'presentation_id')) or row['reason'] not in REASONS:
+    if not all(valid_id(row[k]) for k in ('id', 'submission_id', 'presentation_id')) or row['reason'] not in REASONS + NEWSLETTER_REASONS:
         raise ValueError('Invalid return fields')
     if row['id'] != row['submission_id']:
         raise ValueError('Return identity differs from submission')
@@ -98,14 +120,21 @@ def endpoint(url):
     return url
 
 
-def links(presentation_id, url, secret, expires, language='fr'):
+def links(presentation_id, url, secret, expires, language='fr', briefing_date=None):
     endpoint(url)
     if not valid_id(presentation_id):
         raise ValueError('Invalid presentation ID')
     result = []
-    for reason, label in zip(REASONS, LABELS[language]):
+    reasons, labels = REASONS, LABELS[language]
+    if briefing_date is not None:
+        if presentation_id != newsletter_identity(briefing_date):
+            raise ValueError('Invalid newsletter identity')
+        reasons, labels = NEWSLETTER_REASONS, NEWSLETTER_LABELS[language]
+    for reason, label in zip(reasons, labels):
         payload = dict(v=1, kind='link', presentation_id=presentation_id, reason=reason,
                        link_id=digest([presentation_id, reason, expires]), exp=expires)
+        if briefing_date is not None:
+            payload['briefing_date'] = briefing_date
         result.append((label, url + '?' + urlencode({'action': 'vote', 'token': sign(payload, secret)})))
     return result
 

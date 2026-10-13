@@ -101,9 +101,21 @@ def config_load():
 
 
 
+def retrospective_bounds(edition):
+    if not edition:
+        return None
+    day = datetime.strptime(edition, '%Y-%m-%d').date()
+    if day.isoformat() != edition or day >= datetime.now(ZoneInfo('Europe/Paris')).date():
+        raise ValueError('BRIEFING_DATE doit être une date passée au format AAAA-MM-JJ')
+    start = datetime.combine(day, datetime.min.time(), ZoneInfo('Europe/Paris'))
+    end = datetime.combine(day + timedelta(days=1), datetime.min.time(), ZoneInfo('Europe/Paris'))
+    return start, end
+
+
 def fetch_articles(cfg):
     """Read recent items without prefiltering on the old keyword score."""
     b = cfg['briefing']
+    bounds = retrospective_bounds(os.getenv('BRIEFING_DATE'))
     rules = load_rules()
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
@@ -119,8 +131,16 @@ def fetch_articles(cfg):
                 ORDER BY published_at DESC, id DESC
                 LIMIT %s
             """).format(url=url_expr)
+            if bounds:
+                query = sql.SQL("""
+                    SELECT id, title, normalized_summary, relevance_score, published_at,
+                           {url} AS source_url
+                    FROM unique_articles
+                    WHERE published_at >= %s AND published_at < %s
+                    ORDER BY published_at DESC, id DESC LIMIT %s
+                """).format(url=url_expr)
             # Configurable cap; inspect truncation if your RSS volume grows.
-            cur.execute(query, (int(b['lookback_hours']), int(os.getenv('BRIEFING_FETCH_LIMIT', '2000'))))
+            cur.execute(query, ((*bounds, int(os.getenv('BRIEFING_FETCH_LIMIT', '2000'))) if bounds else (int(b['lookback_hours']), int(os.getenv('BRIEFING_FETCH_LIMIT', '2000')))))
             rows = cur.fetchall()
     articles = []
     for id_, title, summary, score, published, url in rows:
@@ -881,6 +901,9 @@ def format_markdown(events, cfg, analyzed_count, total_events, security_watch=No
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+    if os.getenv('BRIEFING_DATE'):
+        now = os.environ['BRIEFING_DATE'] + ' (Europe/Paris; édition rétrospective)'
+
     heading = "Veille technologique et risques" if lang == "fr" else "Technology and risk briefing"
 
     lines = [f"# {heading} — {now}", "",
@@ -954,6 +977,11 @@ def main():
     start = time.monotonic()
 
     cfg = config_load()
+    if os.getenv('BRIEFING_DATE'):
+        retrospective_bounds(os.environ['BRIEFING_DATE'])
+        daily = Path(os.environ.setdefault('BRIEFING_DAILY_DIR', '/output/daily/' + os.environ['BRIEFING_DATE']))
+        if daily.name != os.environ['BRIEFING_DATE']:
+            raise ValueError('BRIEFING_DAILY_DIR ne correspond pas à BRIEFING_DATE')
 
     languages = cfg["briefing"].get("languages", [cfg["briefing"]["language"]])
     if not languages or len(set(languages)) != len(languages) or any(x not in ("en", "fr") for x in languages):
