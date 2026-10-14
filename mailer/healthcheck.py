@@ -73,6 +73,8 @@ def main():
     parser.add_argument('--repair-plan', action='store_true',
                         help='Afficher date et étapes autorisées pour l’orchestrateur, sans exécution')
     parser.add_argument('--repair-report', help='Compte rendu de reprise à inclure dans l’alerte')
+    parser.add_argument('--operation-failed', action='store_true',
+                        help='Signaler un échec de l’orchestrateur même si les fichiers sont complets')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--send', action='store_true', help='Envoyer réellement une alerte SMTP')
     mode.add_argument('--dry-run', action='store_true', help='Diagnostic sans SMTP (défaut)')
@@ -97,6 +99,8 @@ def main():
             raise ValueError('Édition future interdite')
         stage = 'inspection des étapes'
         missing = missing_steps(options['daily_dir'], day, languages)
+        if args.operation_failed:
+            missing.append('Échec d’une opération du healthcheck : consulter le compte rendu et le journal')
         if args.repair_plan:
             print(day.isoformat())
             repair = options.get('repair', {})

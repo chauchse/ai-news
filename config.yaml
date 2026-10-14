@@ -1683,7 +1683,7 @@ audio:
   xtts_speaker_wav: /voices/homme_fr.wav
   pause_ms: 1200
   title_pause_ms: 600
-  bitrate: 32k
+  bitrate: 48k
 
 # ==========================================================================
 # Podcast : métadonnées, éditions et rétention.
@@ -1745,6 +1745,16 @@ healthcheck:
   repair:
     enabled: true
     stages: [markdown, preview, mail, audio, podcast]
+  feedback_import:
+    enabled: true
+    batch_size: 100
+    max_batches: 10
+    http_timeout: 30
+    max_response_bytes: 1048576
+    connect_timeout: 10
+    # URL et secret API distinct du secret des liens : variables .env.
+    endpoint_env: FEEDBACK_URL
+    api_secret_env: FEEDBACK_API_SECRET
 
 # ==========================================================================
 # Courriel : objets localisés et transport SMTP.

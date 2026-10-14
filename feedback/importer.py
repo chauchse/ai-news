@@ -138,3 +138,44 @@ def synchronize(client, store, cfg):
                 break
     return stats
 
+
+def main():
+    """Run the existing synchronization from the healthcheck's collector container."""
+    import argparse
+    import os
+    from project_config import load_section
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', help='Configuration centrale')
+    parser.add_argument('--dry-run', action='store_true', help='Valider sans réseau ni connexion PostgreSQL')
+    args = parser.parse_args()
+    stage = 'configuration'
+    try:
+        cfg = load_section('healthcheck', args.config).get('feedback_import', {})
+        if not cfg.get('enabled', False):
+            print('Import feedback désactivé')
+            return
+        cfg = dict(cfg, endpoint=os.environ[cfg['endpoint_env']].strip())
+        secret = os.environ[cfg['api_secret_env']]
+        client = Client(cfg, secret)
+        if secret == os.environ.get('FEEDBACK_SIGNING_SECRET'):
+            raise ValueError('API and signing secrets must differ')
+        if args.dry_run:
+            print('Configuration import feedback valide ; aucun réseau, aucune écriture ni acquittement')
+            return
+        import psycopg
+        stage = 'connexion PostgreSQL'
+        with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=cfg['connect_timeout']) as conn:
+            stage = 'synchronisation feedback'
+            stats = synchronize(client, Store(conn), cfg)
+        print('Import feedback : ' + json.dumps(stats, sort_keys=True))
+        if any(stats[key] for key in ('invalid', 'public_invalid', 'conflicts', 'ack_errors')):
+            parser.exit(1, 'Import feedback incomplet : consulter les compteurs, nouvelle tentative au prochain contrôle.\n')
+    except Exception as exc:
+        # No exception text: HTTP endpoints, credentials and payloads are private.
+        parser.exit(1, f'Échec import feedback — {stage} ({type(exc).__name__}).\n')
+
+
+if __name__ == '__main__':
+    main()
+

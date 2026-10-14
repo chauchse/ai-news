@@ -55,6 +55,19 @@ def load_section(name, path=None):
                 stage not in ('markdown', 'preview', 'audio', 'mail', 'podcast') for stage in stages)
                 or len(set(stages)) != len(stages)):
             raise ValueError('Invalid healthcheck.repair.stages')
+        feedback = value.get('feedback_import', {})
+        if not isinstance(feedback, dict) or type(feedback.get('enabled', False)) is not bool:
+            raise ValueError('Invalid healthcheck.feedback_import.enabled')
+        if feedback.get('enabled', False):
+            for key in ('batch_size', 'max_batches', 'http_timeout', 'max_response_bytes', 'connect_timeout'):
+                number = feedback.get(key)
+                if type(number) is not int or number < 1:
+                    raise ValueError('Invalid healthcheck.feedback_import.' + key)
+            if feedback['batch_size'] > 500:
+                raise ValueError('Feedback batch exceeds receiver protocol limit')
+            for key in ('endpoint_env', 'api_secret_env'):
+                if not isinstance(feedback.get(key), str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', feedback[key]):
+                    raise ValueError('Invalid healthcheck.feedback_import.' + key)
     if name in ('briefing', 'semantic_scoring'):
         weights = data.get('scoring', {}).get('domain_weights')
         if not isinstance(weights, dict) or not weights:
