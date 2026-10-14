@@ -97,15 +97,22 @@ if ((HEALTHCHECK)); then
     }
     finish_healthcheck() {
         local status=$? alert_status=0
+        local failure_args=()
+        ((status == 0)) || failure_args=(--operation-failed)
         trap - EXIT
         "${COMPOSE[@]}" run --rm -T --no-deps "${log_mount[@]}" \
             --entrypoint python mailer -m mailer.healthcheck --date "$TODAY" --send \
-            --repair-report "Reprise des étapes existantes selon leurs marqueurs (code=$status)." || alert_status=$?
+            --repair-report "Import feedback et reprise des étapes existantes (code=$status)." \
+            "${failure_args[@]}" || alert_status=$?
         ((status != 0)) || status=$alert_status
         log "Fin du contrôle et de la reprise (code=$status)"
         exit "$status"
     }
     trap finish_healthcheck EXIT
+    # Reuse the existing importer once per real check, including complete editions.
+    # The collector already has psycopg; /workspace provides the current code.
+    "${COMPOSE[@]}" run --rm -T --no-deps -w /workspace \
+        --entrypoint python collector -m feedback.importer
     if ((${#repair_plan[@]} == 1)); then
         log 'Aucune reprise autorisée ou nécessaire'
         exit 0
