@@ -1,0 +1,8 @@
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+WORKDIR /app
+COPY requirements.txt /tmp/base.txt
+COPY feedback/requirements-learning.txt /tmp/learning.txt
+RUN pip install --no-cache-dir -r /tmp/base.txt -r /tmp/learning.txt
+COPY feedback/ /app/feedback/
+ENTRYPOINT ["python", "-m", "feedback.learning"]

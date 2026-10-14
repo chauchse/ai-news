@@ -14,4 +14,4 @@ COPY embeddings/ /app/embeddings/
 
 CMD ["python", "-m", "embeddings.worker"]
 
-COPY project_config.py /app/project_config.py
+COPY feedback/ /app/feedback/

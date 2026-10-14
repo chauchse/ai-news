@@ -13,4 +13,4 @@ COPY config.yaml /app/config.yaml
 
 CMD ["python", "-m", "app.collector"]
 
-COPY project_config.py /app/project_config.py
+COPY feedback/ /app/feedback/
