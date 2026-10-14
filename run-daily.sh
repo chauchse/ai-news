@@ -169,10 +169,22 @@ fi
 # Une seule sélection multilingue et une seule série de synthèses Qwen.
 # Les deux Markdown sont figés pour les reprises de la même journée.
 if [[ ! -f "$STATE/generated" ]]; then
-    log 'Import des retours utilisateur'
-    if ! "${COMPOSE[@]}" run --rm -T collector python -m feedback.importer; then
-        log 'Import indisponible : poursuite avec les retours locaux, aucune purge non confirmée'
+    if ((HEALTHCHECK)); then
+        if ! allowed markdown; then
+            log 'Génération incomplète, reprise non autorisée par la configuration'
+            exit 0
+        fi
+        for language in en fr; do
+            for stage in mail audio podcast; do
+                if [[ -e "$STATE/$language/$stage.done" ]]; then
+                    log 'État incohérent : génération non validée mais étape aval déjà terminée'
+                    exit 1
+                fi
+            done
+        done
+        "${COMPOSE[@]}" up -d --wait postgres ollama
     fi
+    if (( !HEALTHCHECK )) && [[ -z "$EDITION_DATE" ]]; then
     log 'Collecte et scoring'
     "${COMPOSE[@]}" run --rm -T collector
     "${COMPOSE[@]}" run --rm -T collector python -m app.scorer

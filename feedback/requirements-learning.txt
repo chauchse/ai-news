@@ -1,3 +1,0 @@
-# Optional CPU-only tools, used by explicit training/evaluation commands.
-scikit-learn>=1.5,<2.0
-catboost>=1.2,<2.0

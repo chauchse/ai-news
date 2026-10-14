@@ -116,23 +116,9 @@ def build_message(cfg):
     text = Path(cfg.get('input', '/output/briefing.md')).read_text(encoding='utf-8')
     if not text.strip():
         raise ValueError('Briefing Markdown vide')
-    from feedback.settings import load as feedback_load
-    from feedback.common import links
-    feedback_cfg = feedback_load()
-    pattern = re.compile(r'<!-- feedback:([a-f0-9]{64}) -->')
-    if feedback_cfg['enabled']:
-        expires = int(Path(cfg.get('input', '/output/briefing.md')).stat().st_mtime) + feedback_cfg['link_days'] * 86400
-        if expires <= time.time():
-            raise ValueError('Feedback links would already be expired')
-        def replace_marker(match):
-            values = links(match[1], feedback_cfg['endpoint'], os.getenv('FEEDBACK_SIGNING_SECRET', ''),
-                           expires, cfg.get('language', 'fr'))
-            return '**' + ('Votre avis' if cfg.get('language', 'fr') == 'fr' else 'Your feedback') + '** : ' + ' · '.join(
-                '[' + label + '](' + url + ')' for label, url in values)
-        text = pattern.sub(replace_marker, text)
-    else:
-        text = pattern.sub('', text)
-    today = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
+    text = add_feedback(text, cfg)
+    today = cfg.get('edition_date') or datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
+    datetime.strptime(today, '%Y-%m-%d')
     subject = str(cfg.get('subject', 'AI News — Briefing du {date}')).replace('{date}', today)
     msg = EmailMessage()
     msg['Subject'] = subject
