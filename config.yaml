@@ -1742,6 +1742,12 @@ healthcheck:
   log_max_bytes: 65536
   log_tail_lines: 200
   subject: "[AI News][ALERTE] Édition {date} incomplète — {count} étape(s)"
+  database_backup:
+    enabled: true
+    directory: /var/backups/ai-news
+    retention_days: 30
+    compression_level: 6
+    timeout_seconds: 600
   repair:
     enabled: true
     stages: [markdown, preview, mail, audio, podcast]
@@ -1755,6 +1761,8 @@ healthcheck:
     # URL et secret API distinct du secret des liens : variables .env.
     endpoint_env: FEEDBACK_URL
     api_secret_env: FEEDBACK_API_SECRET
+    implicit_useful:
+      enabled: true  # La veille, après import complet et au moins un vote article/global.
 
 # ==========================================================================
 # Courriel : objets localisés et transport SMTP.

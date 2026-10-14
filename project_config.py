@@ -47,6 +47,19 @@ def load_section(name, path=None):
         if any(not Path(value[key]).is_absolute() for key in ('daily_dir', 'log_path')):
             raise ValueError('Healthcheck paths must be absolute')
         value['subject'].format(date='2000-01-01', count=1)
+        backup = value.get('database_backup', {})
+        if not isinstance(backup, dict) or type(backup.get('enabled', False)) is not bool:
+            raise ValueError('Invalid healthcheck.database_backup.enabled')
+        if backup.get('enabled', False):
+            directory = backup.get('directory')
+            if (not isinstance(directory, str) or not Path(directory).is_absolute()
+                    or '\n' in directory or '\r' in directory or directory == '/'):
+                raise ValueError('Invalid healthcheck.database_backup.directory')
+            for key in ('retention_days', 'timeout_seconds'):
+                if type(backup.get(key)) is not int or backup[key] < 1:
+                    raise ValueError('Invalid healthcheck.database_backup.' + key)
+            if type(backup.get('compression_level')) is not int or not 1 <= backup['compression_level'] <= 9:
+                raise ValueError('Invalid healthcheck.database_backup.compression_level')
         repair = value.get('repair', {})
         if not isinstance(repair, dict) or type(repair.get('enabled', False)) is not bool:
             raise ValueError('Invalid healthcheck.repair.enabled')
@@ -58,6 +71,9 @@ def load_section(name, path=None):
         feedback = value.get('feedback_import', {})
         if not isinstance(feedback, dict) or type(feedback.get('enabled', False)) is not bool:
             raise ValueError('Invalid healthcheck.feedback_import.enabled')
+        inference = feedback.get('implicit_useful', {})
+        if not isinstance(inference, dict) or type(inference.get('enabled', False)) is not bool:
+            raise ValueError('Invalid healthcheck.feedback_import.implicit_useful.enabled')
         if feedback.get('enabled', False):
             for key in ('batch_size', 'max_batches', 'http_timeout', 'max_response_bytes', 'connect_timeout'):
                 number = feedback.get(key)

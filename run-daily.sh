@@ -69,6 +69,72 @@ flock -n 9 || {
 export TZ=Europe/Paris
 COMPOSE=(docker compose --profile ai --profile mail)
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+backup_database() (
+    # Host-only archive; use PostgreSQL's existing tools, not a new image.
+    set -e
+    umask 077
+    backup_settings=$("${COMPOSE[@]}" run --rm -T --no-deps --entrypoint python mailer -c '
+from project_config import load_section
+cfg = load_section("healthcheck").get("database_backup", {})
+print("enabled" if cfg.get("enabled", False) else "disabled")
+if cfg.get("enabled", False):
+    for key in ("directory", "retention_days", "compression_level", "timeout_seconds"):
+        print(cfg[key])
+')
+    mapfile -t backup_values <<< "$backup_settings"
+    [[ "${backup_values[0]}" == enabled ]] || { log 'Sauvegarde PostgreSQL désactivée'; exit 0; }
+    backup_dir=${backup_values[1]}
+    backup_retention=${backup_values[2]}
+    backup_compression=${backup_values[3]}
+    backup_timeout=${backup_values[4]}
+    backup_day=$(date +%F)
+    backup_archive="$backup_dir/ai-news-db-$backup_day.dump"
+    backup_temp=''
+    trap '[[ -z "$backup_temp" ]] || rm -f -- "$backup_temp"' EXIT
+    [[ ! -L "$backup_dir" ]] || { log 'Répertoire de sauvegarde refusé : lien symbolique'; exit 1; }
+    mkdir -p -- "$backup_dir"
+    [[ ! -L "$backup_archive" ]] || { log 'Archive de sauvegarde refusée : lien symbolique'; exit 1; }
+    if [[ ! -e "$backup_archive" ]]; then
+        backup_temp=$(mktemp "$backup_dir/.ai-news-db-$backup_day.XXXXXX")
+        timeout "$backup_timeout" "${COMPOSE[@]}" exec -T postgres sh -c \
+            'exec pg_dump -Fc -Z "$1" -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+            sh "$backup_compression" > "$backup_temp"
+        test -s "$backup_temp"
+        timeout "$backup_timeout" "${COMPOSE[@]}" exec -T postgres \
+            pg_restore --list < "$backup_temp" > /dev/null
+        mv -- "$backup_temp" "$backup_archive"
+        backup_temp=''
+        log "Sauvegarde PostgreSQL créée : $backup_archive"
+    else
+        [[ -f "$backup_archive" && -s "$backup_archive" ]] || {
+            log 'Archive du jour invalide : aucune purge effectuée'; exit 1;
+        }
+        timeout "$backup_timeout" "${COMPOSE[@]}" exec -T postgres \
+            pg_restore --list < "$backup_archive" > /dev/null
+        log 'Sauvegarde PostgreSQL du jour déjà présente et lisible'
+    fi
+    # Calendar retention: today and the preceding retention_days - 1 days.
+    # Never recurse or delete files outside this task's exact naming convention.
+    python3 - "$backup_dir" "$backup_day" "$backup_retention" <<'PYBACKUP'
+import re
+import sys
+from datetime import date, timedelta
+from pathlib import Path
+root, today, retention = Path(sys.argv[1]), date.fromisoformat(sys.argv[2]), int(sys.argv[3])
+cutoff = today - timedelta(days=retention - 1)
+for path in root.iterdir():
+    match = re.fullmatch(r'ai-news-db-(\d{4}-\d{2}-\d{2})\.dump', path.name)
+    if not match or path.is_symlink() or not path.is_file():
+        continue
+    try:
+        day = date.fromisoformat(match[1])
+    except ValueError:
+        continue
+    if day < cutoff:
+        path.unlink()
+        print(f'Ancienne sauvegarde supprimée : {path.name}')
+PYBACKUP
+)
 if ((HEALTHCHECK)); then
     # Docker stays on the host; the mailer container only inspects and alerts.
     health_log=$("${COMPOSE[@]}" run --rm -T --no-deps --entrypoint python mailer \
@@ -102,13 +168,14 @@ if ((HEALTHCHECK)); then
         trap - EXIT
         "${COMPOSE[@]}" run --rm -T --no-deps "${log_mount[@]}" \
             --entrypoint python mailer -m mailer.healthcheck --date "$TODAY" --send \
-            --repair-report "Import feedback et reprise des étapes existantes (code=$status)." \
+            --repair-report "Sauvegarde PostgreSQL, import feedback et reprise des étapes existantes (code=$status)." \
             "${failure_args[@]}" || alert_status=$?
         ((status != 0)) || status=$alert_status
         log "Fin du contrôle et de la reprise (code=$status)"
         exit "$status"
     }
     trap finish_healthcheck EXIT
+    backup_database
     # Reuse the existing importer once per real check, including complete editions.
     # The collector already has psycopg; /workspace provides the current code.
     "${COMPOSE[@]}" run --rm -T --no-deps -w /workspace \
