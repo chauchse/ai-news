@@ -2,8 +2,12 @@
 import json
 import urllib.request
 from contextlib import contextmanager
+from datetime import datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from mailer.feedback_links import canonical, endpoint, validate_return, NEWSLETTER_REASONS
+from mailer.feedback_links import briefing_entries, digest
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -91,10 +95,55 @@ class Store:
         # Transaction has committed before IDs leave this method.
         return accepted, inserted
 
+    def infer_useful(self, options):
+        """Record deductions separately; explicit votes always remain authoritative."""
+        from psycopg.types.json import Jsonb
+        today = datetime.now(ZoneInfo(options['timezone'])).date()
+        day = (today - timedelta(days=1)).isoformat()
+        directory = Path(options['daily_dir']) / day
+        languages = options['languages']
+        if not languages or len(set(languages)) != len(languages) or any(
+                language not in ('en', 'fr') for language in languages):
+            raise ValueError('Invalid briefing languages')
+        if not (directory / 'generated').is_file():
+            return 0
+        identities = None
+        for language in languages:
+            edition = directory / language
+            if not (edition / 'mail.done').is_file():
+                return 0  # Do not infer feedback for an edition not sent yet.
+            parsed_day, _, entries = briefing_entries((edition / 'briefing.md').read_text(encoding='utf-8'))
+            current = {entry['presentation_id'] for entry in entries}
+            if parsed_day != day or not current or (identities is not None and identities != current):
+                raise ValueError('Published feedback identities differ')
+            identities = current
+        with self.conn.transaction():
+            with self.conn.cursor() as cur:
+                cur.execute("""SELECT 1 FROM feedback_runs
+                    WHERE kind='implicit_useful' AND report->>'briefing_date'=%s""", (day,))
+                if cur.fetchone():
+                    return 0
+                cur.execute('SELECT presentation_id FROM feedback_returns WHERE presentation_id = ANY(%s)',
+                            (sorted(identities),))
+                explicit = {row[0] for row in cur.fetchall()}
+                cur.execute('SELECT EXISTS (SELECT 1 FROM feedback_newsletter_returns WHERE briefing_date=%s)', (day,))
+                if not explicit and not cur.fetchone()[0]:
+                    return 0
+                items = []
+                for pid in sorted(identities - explicit):
+                    identity = digest({'scope': 'implicit-useful-v1', 'presentation_id': pid})
+                    items.append(dict(id=identity, submission_id=identity, presentation_id=pid,
+                                      reason='useful', inferred=True, briefing_date=day))
+                if items:
+                    cur.execute("INSERT INTO feedback_runs(kind,report) VALUES ('implicit_useful',%s)",
+                                (Jsonb(dict(briefing_date=day, items=items)),))
+                return len(items)
+
 
 def synchronize(client, store, cfg):
     stats = dict(received=0, imported=0, known=0, invalid=0, public_invalid=0, conflicts=0, confirmed=0, ack_errors=0, batches=0)
     seen = set()
+    drained = False
     with store.lock():
         for _ in range(cfg['max_batches']):
             value = client.request('pull')
@@ -105,6 +154,8 @@ def synchronize(client, store, cfg):
             if type(invalid_count) is not int or invalid_count < 0:
                 raise ValueError('Invalid public error count')
             stats['public_invalid'] = max(stats['public_invalid'],invalid_count)
+            if not rows:
+                drained = True
             valid = []
             for row in rows:
                 stats['received'] += 1
@@ -136,6 +187,13 @@ def synchronize(client, store, cfg):
             seen.update(ids)
             if fields[2]:
                 break
+        inference = cfg.get('implicit_useful', {})
+        if inference.get('enabled', False):
+            # A quota stop or anomalous batch must not turn pending votes into approval.
+            complete = drained and not any(stats[key] for key in
+                ('invalid', 'public_invalid', 'conflicts', 'ack_errors'))
+            stats['inferred_useful'] = store.infer_useful(inference) if complete else 0
+            stats['inference_deferred'] = int(not complete)
     return stats
 
 
@@ -156,6 +214,11 @@ def main():
             print('Import feedback désactivé')
             return
         cfg = dict(cfg, endpoint=os.environ[cfg['endpoint_env']].strip())
+        if cfg.get('implicit_useful', {}).get('enabled', False):
+            health = load_section('healthcheck', args.config)
+            briefing = load_section('briefing', args.config)['briefing']
+            cfg['implicit_useful'] = dict(cfg['implicit_useful'], daily_dir=health['daily_dir'],
+                timezone=health['timezone'], languages=briefing.get('languages', [briefing['language']]))
         secret = os.environ[cfg['api_secret_env']]
         client = Client(cfg, secret)
         if secret == os.environ.get('FEEDBACK_SIGNING_SECRET'):

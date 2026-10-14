@@ -28,6 +28,7 @@ services:
       FEEDBACK_SIGNING_SECRET: ${FEEDBACK_SIGNING_SECRET:-}
     volumes:
       - ./:/workspace
+      - ./output:/output:ro
     depends_on:
       postgres:
         condition: service_healthy

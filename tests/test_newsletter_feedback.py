@@ -66,6 +66,34 @@ class NewsletterMailTests(unittest.TestCase):
 
 
 class NewsletterImportTests(unittest.TestCase):
+    def test_implicit_useful_requires_empty_queue_without_anomalies(self):
+        cfg = dict(batch_size=10, max_batches=2, implicit_useful=dict(enabled=True))
+        client, store = MagicMock(), MagicMock()
+        store.lock.side_effect = nullcontext
+        store.infer_useful.return_value = 3
+        client.request.return_value = dict(returns=[], invalid_count=0)
+        stats = synchronize(client, store, cfg)
+        self.assertEqual(stats['inferred_useful'], 3)
+        self.assertEqual(stats['inference_deferred'], 0)
+        store.infer_useful.assert_called_once_with(cfg['implicit_useful'])
+        store.reset_mock()
+        client.request.return_value = dict(returns=[], invalid_count=1)
+        stats = synchronize(client, store, cfg)
+        self.assertEqual(stats['inference_deferred'], 1)
+        store.infer_useful.assert_not_called()
+
+    def test_quota_stop_defers_implicit_useful(self):
+        cfg = dict(batch_size=10, max_batches=1, implicit_useful=dict(enabled=True))
+        client, store = MagicMock(), MagicMock()
+        store.lock.side_effect = nullcontext
+        row = returned()
+        store.save.return_value = ([row['id']], 1)
+        client.request.side_effect = [dict(returns=[row]),
+            dict(deleted=[row['id']], absent=[], errors=[])]
+        stats = synchronize(client, store, cfg)
+        self.assertEqual(stats['inference_deferred'], 1)
+        store.infer_useful.assert_not_called()
+
     def test_separate_table_and_replay_conflict(self):
         conn = MagicMock()
         cursor = conn.cursor.return_value.__enter__.return_value
