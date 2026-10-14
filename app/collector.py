@@ -10,7 +10,7 @@ from app.source_health import consecutive_failures, disable_source
 
 import feedparser
 import psycopg
-import yaml
+from project_config import config_path, load_section
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,7 +19,7 @@ logging.basicConfig(
 log = logging.getLogger("ai-news")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
-CONFIG_PATH = os.getenv("SOURCES_FILE", "/app/config/sources.yaml")
+CONFIG_PATH = os.getenv("SOURCES_FILE") or config_path()
 
 
 def parse_date(entry):
@@ -104,8 +104,7 @@ def purge_disabled_sources(conn, config):
     conn.commit()
 
 def main():
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = yaml.safe_load(f) or {}
+    config = load_section('collection', CONFIG_PATH)
 
     policy = config.get('source_health', {})
     threshold = int(policy.get('consecutive_failures', 3))

@@ -9,7 +9,7 @@ Usage: ./init-repo.sh [--models-only] [--with-piper]
   Sans option : dossiers, .env, Kokoro, images, PostgreSQL, SQL, Qwen,
                 MiniLM et MarianMT. PostgreSQL et Ollama restent démarrés.
   --models-only : télécharge uniquement Kokoro (et Piper si demandé).
-  --with-piper  : ajoute les voix Piper FR/EN de config/audio.yaml.
+  --with-piper  : ajoute les voix Piper FR/EN de la section audio de config.yaml.
 Les fichiers locaux existants ne sont pas remplacés. Internet est nécessaire.
 HELP
 }

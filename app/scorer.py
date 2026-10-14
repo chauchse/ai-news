@@ -1,15 +1,14 @@
 import os
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 
 import psycopg
-import yaml
+from project_config import config_path, load_section
 
-CONFIG_PATH = os.getenv("SCORING_FILE", "/app/config/scoring.yaml")
-BRIEFING_CONFIG_PATH = os.getenv("BRIEFING_CONFIG_FILE", "/app/config/briefing.yaml")
+CONFIG_PATH = os.getenv("SCORING_FILE") or config_path()
+BRIEFING_CONFIG_PATH = os.getenv("BRIEFING_CONFIG_FILE") or config_path()
 
-# Categories et expressions indicatives ; surchargeables dans briefing.yaml.
+# Categories et expressions indicatives ; surchargeables dans config.yaml, section briefing.scoring.
 DOMAIN_KEYWORDS = {
     "artificial_intelligence": [
         "artificial intelligence", "generative ai", "genai", "machine learning",
@@ -93,7 +92,7 @@ def score_article(title, content, published_at, topics):
         keywords = topic.get("keywords", [])
         matches = sum(1 for keyword in keywords if str(keyword).lower() in text)
         if matches:
-            candidate = min(topic["weight"], matches * 15)
+            candidate = min(topic["max_points"], matches * 15)
             topic_score = max(topic_score, candidate)
     topic_score = min(topic_score, 60)
 
@@ -178,17 +177,10 @@ def business_bonus(title, content, scoring_config):
     return int(bonus), [domain for domain, _ in domain_hits]
 
 
-def load_yaml(path):
-    if not Path(path).is_file():
-        return {}
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
-
-
 def main():
-    config = load_yaml(CONFIG_PATH)
+    config = load_section('scoring', CONFIG_PATH)
     topics = config.get("topics", [])
-    briefing_config = load_yaml(BRIEFING_CONFIG_PATH)
+    briefing_config = load_section('briefing', BRIEFING_CONFIG_PATH)
     scoring_config = briefing_config.get("scoring", {})
 
     # Force un recalcul lors de l'introduction du scoring métier.

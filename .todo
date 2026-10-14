@@ -1,1 +1,5 @@
-S assurer qu'il n'y ai pas d'overlap d'un briefing a l'autre si des sujets reviennent
+Sauvegarde de la DB et restauration
+
+Pour les feedback, on considere que s'il y a au moins un réponse, lors de la récupération le lendemain des notes, et que tous les elements ne sont pas notés, les elements non notés seront classés comme utiles
+
+Pour les vulnerabilités, plutot que de faire une synthese par article, il faudrait publier une synthese globale de liste des vulnerabilités en classant par seveirité 0day puis CVSS du plus grand au plus petit, et precisé si exploité publiquement avec un focus sur les technologies exposées comme firewall, routeur, proxy, technologies cloud, bastion d'administration

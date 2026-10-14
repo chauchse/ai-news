@@ -1,12 +1,10 @@
 import re
-import yaml
-from pathlib import Path
+from project_config import load_section
 
 
 class CyberGlossary:
-    def __init__(self, config_path="/config/glossary.yaml"):
-        with open(config_path, encoding="utf-8") as f:
-            config = yaml.safe_load(f) or {}
+    def __init__(self, config_path=None):
+        config = load_section('glossary', config_path)
 
         self.terms = sorted(
             set(config.get("protected_terms", [])),
@@ -15,6 +13,7 @@ class CyberGlossary:
         )
 
         self.translations = config.get("translations", {}).get("en-fr", {})
+        self.case_sensitive_terms = set(config.get("case_sensitive_terms", []))
 
         self.patterns = [
             r"\bCVE-\d{4}-\d{4,}\b",
@@ -30,7 +29,7 @@ class CyberGlossary:
         for term in self.terms:
             pattern = re.compile(
                 rf"(?<!\w){re.escape(term)}(?!\w)",
-                re.IGNORECASE,
+                0 if term in self.case_sensitive_terms else re.IGNORECASE,
             )
 
             for match in pattern.finditer(text):

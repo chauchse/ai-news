@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import wave
 from zoneinfo import ZoneInfo
-import yaml
+from project_config import load_section
 
 
 def extract(text):
@@ -64,13 +64,13 @@ def check_english_dependencies():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='/config/audio.yml')
+    parser.add_argument('--config', help='Configuration globale ; défaut : config.yaml / AI_NEWS_CONFIG')
     parser.add_argument('--language', choices=['en', 'fr'])
     parser.add_argument('--input')
     parser.add_argument('--output')
     parser.add_argument('--date', help='Date de l’édition, AAAA-MM-JJ')
     args = parser.parse_args()
-    config = yaml.safe_load(Path(args.config).read_text(encoding='utf-8')) or {}
+    config = load_section('audio', args.config)
     for key in ('language', 'input', 'output'):
         if getattr(args, key):
             config[key] = getattr(args, key)

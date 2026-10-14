@@ -2,16 +2,15 @@
 import os
 import re
 from pathlib import Path
-import yaml
+from project_config import config_path, load_section
 
-PATH = Path(os.getenv('WATCHLIST_FILE', '/config/watchlists.yaml'))
+PATH = Path(os.getenv('WATCHLIST_FILE') or config_path())
 
 
 def load_rules(path=PATH):
     if not Path(path).exists():
         raise FileNotFoundError(f'Watchlist absente: {path}; montez le fichier YAML dans le conteneur')
-    with open(path, encoding='utf-8') as f:
-        cfg = yaml.safe_load(f) or {}
+    cfg = load_section('watchlists', path)
     for kind in ('whitelist', 'blacklist'):
         for rule in cfg.get(kind, []):
             if not rule.get('name') or not rule.get('keywords'):

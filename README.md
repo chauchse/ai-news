@@ -27,58 +27,36 @@ Le regroupement du briefing est autonome. `embeddings.worker` est un outil de di
 
 ## Installation
 
-Toutes les commandes partent de la racine du dépôt. Docker et Docker Compose avec profils sont nécessaires ; ajouter `sudo` devant `docker` si votre compte l’exige.
-
-### Initialisation automatique (recommandée)
-
-Installer Docker avec le plugin Compose v2 et `curl`, puis depuis le dépôt cloné :
+Prérequis : Linux, Docker avec Compose v2, `curl`, accès Internet et espace disque
+pour les modèles. Toutes les commandes partent de la racine du dépôt ; ajouter
+`sudo` devant `docker` si nécessaire.
 
 ```bash
 ./init-repo.sh
 ```
 
-Le script crée `output/`, `podcast/state/`, `audio/voices/` et les dossiers de modèles. Si `.env` est absent, il le crée avec un mot de passe PostgreSQL aléatoire. Il télécharge Kokoro et les voix FR/EN, construit les images (mailer inclus), démarre PostgreSQL et Ollama, applique les scripts SQL et télécharge Qwen, MiniLM et MarianMT. MiniLM et MarianMT sont conservés dans le volume `embeddings_models`, Qwen dans `ollama_models`.
-
-Internet et plusieurs Go de disque sont nécessaires. Le script s’arrête à la première erreur et peut être relancé : les modèles audio non vides déjà présents et le `.env` existant sont conservés. Ne pas changer le mot de passe d’un PostgreSQL déjà initialisé en modifiant seulement `.env`.
+Le script prépare les dossiers, crée `.env` s’il est absent, télécharge les modèles
+et voix, construit les images, démarre PostgreSQL et Ollama et applique les scripts
+SQL. Il conserve le `.env` et les fichiers de modèles non vides déjà présents.
+Il ne lance ni collecte, ni envoi de mail, ni publication.
 
 ```bash
-# Télécharger seulement Kokoro, sans Docker ni initialisation SQL
+# Modèles Kokoro uniquement
 ./init-repo.sh --models-only
-# Initialisation complète avec les voix Piper FR/EN configurées
+# Installation avec les voix Piper
 ./init-repo.sh --with-piper
-# Télécharger seulement Kokoro et Piper
+# Modèles Kokoro et Piper uniquement
 ./init-repo.sh --models-only --with-piper
 ```
 
-Sources : [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M/tree/main) et [Piper voices](https://huggingface.co/rhasspy/piper-voices/tree/main). Le script contient les commandes `curl` de téléchargement. Ajouter manuellement toute voix personnalisée et adapter `config/audio.yaml`.
+PostgreSQL et Ollama sont persistants ; les autres services s’exécutent à la demande.
+Les limites mémoire s’additionnent : 6 Go pour `embeddings`, 4 Go pour Ollama et
+2 Go pour `audio` dans Compose. Les modèles sont exclus de Git.
 
-Aucune collecte, aucun mail et aucune publication ne sont lancés. Compléter les configurations SMTP/SFTP et `.env` avant le pipeline quotidien. Le fichier `podcast/known_hosts` est créé vide : ajouter la clé vérifiée du serveur avant publication. Pour utiliser un fichier existant, définir `PODCAST_KNOWN_HOSTS=/chemin/absolu/known_hosts` dans `.env`.
+## Configuration
 
-XTTS reste optionnel : construire le service dédié et lancer la commande décrite plus bas pour télécharger son modèle. Fournir aussi `audio/voices/homme_fr.wav` ; aucune voix de référence n’est générée par le script.
-
-Les étapes suivantes détaillent l’installation manuelle.
-
-### 1. Préparer la configuration
-
-```bash
-cd /opt/ai-news
-mkdir -p output podcast/state
-# Créer ou compléter .env avec votre éditeur.
-```
-
-Variables attendues dans `.env` (remplacer les exemples) :
-
-```dotenv
-POSTGRES_DB=ai_news
-POSTGRES_USER=ai_news
-POSTGRES_PASSWORD=mot_de_passe_a_remplacer
-POSTGRES_PORT=5432
-# Seulement pour la publication SFTP :
-PODCAST_SFTP_USER=utilisateur_sftp
-PODCAST_SFTP_PASSWORD=mot_de_passe_sftp
-```
-
-### 2. Construire et démarrer les services
+Les réglages applicatifs sont dans `config.yaml`, chargés par `project_config.py`.
+Les secrets et adresses de déploiement restent dans `.env`.
 
 ```bash
 docker compose --profile ai config --quiet
@@ -104,179 +82,98 @@ for sql in app/sql/001_initial_schema.sql \
 done
 ```
 
-Vérifier que chaque fichier s’est terminé sans erreur avant de poursuivre. Les scripts actuels utilisent `IF NOT EXISTS` ou `CREATE OR REPLACE VIEW`.
+Le collecteur monte le dépôt en écriture pour mettre à jour les sources ; les autres
+services lisent `config.yaml` en lecture seule. Pour une copie de configuration,
+utiliser `AI_NEWS_CONFIG` en Python local ou `--config` pour mail, audio et podcast.
 
-## Exécution étape par étape
-
-### 1. Collecter et normaliser
+## Collecte et scoring
 
 ```bash
+# Écrit les articles et les résultats de collecte en base
 docker compose run --rm -T collector
-```
-
-Le collecteur parcourt les sources activées, insère les nouveaux articles, puis normalise le HTML. Un article existant de même source et même GUID n’est pas mis à jour. Les erreurs de flux sont enregistrées dans `collection_runs` et les autres flux continuent.
-
-**Comportement actuel : une source avec `enabled: false` entraîne la suppression de ses articles en base au début de la collecte.**
-
-Le catalogue et les autres configurations du collecteur sont montés depuis l’hôte. Une modification de `config/sources.yaml` est prise en compte à la prochaine collecte. Après modification du code ou des dépendances, reconstruire :
-
-```bash
-docker compose build collector
-```
-
-### Désactivation automatique des flux défaillants
-
-`config/sources.yaml` contient la politique :
-
-```yaml
-source_health:
-  auto_disable: true
-  consecutive_failures: 3
-```
-
-Après trois échecs consécutifs de téléchargement ou de lecture d’un flux, la source passe à `enabled: false` dans le YAML et en base. Ses articles sont supprimés de la base ; la source et son historique `collection_runs` sont conservés. Une collecte réussie, même partielle, interrompt la série d’échecs. Un flux valide sans article n’est pas une erreur. Les erreurs SQL/internes ne comptent pas pour la désactivation automatique.
-
-Le fichier YAML est modifié sous verrou et remplacé atomiquement ; sa version précédente est conservée dans `config/sources.yaml.bak`. Les sources suivantes continuent d’être collectées. Les modifications restent visibles dans Git pour revue. Si l’écriture du YAML échoue, la source n’est pas automatiquement purgée en base.
-
-Pour réactiver une source après correction de son URL ou résolution du problème, remettre `enabled: true` dans le YAML : la prochaine collecte la réactive en base. Les articles seront récupérés à nouveau selon le contenu disponible du flux. Définir `auto_disable: false` pour conserver uniquement l’enregistrement des erreurs.
-
-Après cette mise à jour, reconstruire le collecteur : `sudo docker compose build collector`. Les compteurs utilisent les erreurs de flux identifiées par cette version ; les anciennes erreurs non catégorisées ne déclenchent pas de désactivation immédiate.
-
-### 2. Calculer les scores
-
-```bash
+# Recalcule les scores en base
 docker compose run --rm -T collector python -m app.scorer
 ```
 
-Le score combine `config/scoring.yaml` et le bonus métier de `config/briefing.yaml`. Il est utilisé pour filtrer les candidats du briefing. `scoring.rescore_all: true` recalcule toute la base ; sinon les scores absents ou anciens de plus de 12 heures sont traités.
+Les sources utilisent `collection.sources[].url` et `enabled`.
+Une source désactivée entraîne la suppression de ses articles pendant la collecte.
+La désactivation automatique utilise le seuil de `collection.source_health` : les
+erreurs de téléchargement ou de lecture comptent, les erreurs SQL ne comptent pas.
+Un flux valide sans article n’est pas un échec.
 
-Pour reprendre uniquement une normalisation incomplète :
+La mise à jour du YAML est verrouillée, atomique et sauvegardée dans
+`config.yaml.bak`. Si elle échoue, la purge automatique n’est pas effectuée.
+Un article de même source et de même GUID n’est pas réécrit.
+
+`briefing.scoring.rescore_all` active le recalcul total ; sinon seuls les scores
+absents ou datant de plus de douze heures sont traités.
+
+## Briefing et éditions quotidiennes
 
 ```bash
-docker compose run --rm -T collector python -m app.normalize_articles
+# Prépare le jour courant : collecte, scoring, Markdown, aperçus HTML et MP3
+# Écrit en base et dans output/, sans SMTP ni SFTP
+sudo ./run-daily.sh --prepare
+# Pipeline quotidien avec envoi des mails et publication SFTP
+sudo ./run-daily.sh
 ```
 
-### 3. Vérifier la sélection sans générer le briefing
+Les deux Markdown sont préparés avant les envois. Le pipeline traite ensuite le
+mail, l’audio et le podcast anglais, puis français. Il impose le moteur Kokoro.
+
+```text
+output/daily/AAAA-MM-JJ/
+├── generated
+├── en/
+│   ├── briefing.md
+│   ├── briefing-email.html
+│   ├── AAAA-MM-JJ-briefing.mp3
+│   ├── mail.done
+│   ├── audio.done
+│   └── podcast.done
+└── fr/
+    └── mêmes fichiers
+```
+
+Les marqueurs permettent la reprise sans répéter les étapes terminées. Les aperçus
+ne créent pas de marqueur d’envoi. La date est fixée en Europe/Paris au début du
+pipeline. Les dossiers quotidiens ne sont pas purgés automatiquement.
+
+Pour évaluer la sélection seule :
 
 ```bash
 docker compose --profile ai run --rm -T \
   -e BRIEFING_DRY_RUN=1 embeddings python -m embeddings.briefing
 ```
 
-Ce contrôle charge MiniLM et appelle Qwen pour la déduplication et l’évaluation. Il ne fait ni synthèse, ni traduction, ni écriture du Markdown.
+Cette commande charge MiniLM et appelle Qwen, sans synthèse, traduction ni écriture
+Markdown. `embeddings.worker` est un diagnostic de similarité, sans scoring ni
+stockage de groupes.
 
-### 4. Générer le briefing
-
-```bash
-docker compose --profile ai run --rm -T \
-  -e BRIEFING_DRY_RUN=0 \
-  -e BRIEFING_OUTPUT=/output/briefing.md \
-  embeddings python -m embeddings.briefing
-cat output/briefing.md
-```
-
-Le montage `./output:/output` conserve le résultat après suppression du conteneur. Sans `BRIEFING_OUTPUT`, le chemin par défaut est `/tmp/ai-news-briefing.md`, non persistant.
-
-Le briefing filtre les articles récents selon le score et les règles de veille, puis regroupe les événements. Qwen évalue leur pertinence technique, leur importance et leur pertinence métier. La sélection applique les quotas thématiques et donne priorité aux P1 si l’option est activée. Les synthèses sont produites en anglais, puis traduites en français avec protection des termes techniques. Une annexe peut ajouter des liens vers des alertes P1/P2 évaluées mais non retenues. Le nombre publié peut être inférieur au plafond configuré.
-
-### 5. Générer le MP3
-
-Avec le moteur actuel `kokoro`, ces fichiers locaux sont nécessaires :
-
-```text
-audio/models/kokoro/config.json
-audio/models/kokoro/kokoro-v1_0.pth
-audio/models/kokoro/voices/ff_siwis.pt
-```
-
-Ils sont montés dans `/models`. Les modèles sont exclus de Git ; les télécharger avec `./init-repo.sh --models-only`. Le conteneur audio est configuré en mode Hugging Face hors ligne.
+## Éditions rétrospectives
 
 ```bash
-docker compose --profile ai run --rm -T audio
-ls -lh "output/$(TZ=Europe/Paris date +%F)-briefing.mp3"
+# Remplacer la date par une journée passée
+sudo ./run-daily.sh --date 2026-10-10
+# Publication des podcasts, sans mail
+sudo ./run-daily.sh --date 2026-10-10 --publish
+# Envoi des mails, sans publication
+sudo ./run-daily.sh --date 2026-10-10 --send-mail
 ```
 
-`config/audio.yaml` indique l’entrée Markdown, le moteur, la voix, les pauses et le débit. Le module préfixe automatiquement le nom de sortie par la date en Europe/Paris.
+La préparation utilise les articles et scores disponibles en base, sans collecte
+ni recalcul. La sélection couvre la journée civile Europe/Paris selon
+`published_at`, y compris les journées de 23 ou 25 heures. Les modèles et la
+configuration sont ceux du lancement.
 
-Le MP3 est mono, encodé à 22 050 Hz. Les paramètres se règlent dans le YAML : `pause_ms` entre articles, `title_pause_ms` après les titres et rubriques (0 à 10 000 ms), et `bitrate` parmi `24k`, `32k`, `40k`, `48k`. Vérifier à l’écoute les sigles, noms propres, CVE et anglicismes ; les pauses ne garantissent pas une prosodie particulière. Vérifier aussi les licences des modèles et voix utilisés.
+Préparer plusieurs journées dans l’ordre chronologique. Les éditions ultérieures
+ne sont pas réécrites. Des Markdown présents sans marqueur `generated` arrêtent
+la reprise pour permettre leur vérification. La publication est limitée par la
+rétention du podcast ; les liens de feedback suivent leur propre expiration.
 
-Pour utiliser **Piper**, définir `engine: piper` dans `config/audio.yaml` et fournir le modèle ONNX ainsi que son fichier `.onnx.json` dans `audio/models/`. La voix française configurée est `/models/fr_FR-tom-medium.onnx`.
+## Mail
 
-```bash
-docker compose --profile ai build audio
-docker compose --profile ai run --rm -T audio
-```
-
-Pour utiliser **XTTS**, définir `engine: xtts` et utiliser le service dédié, qui installe Coqui TTS. Le modèle nommé `tts_models/multilingual/multi-dataset/xtts_v2` utilise le cache `audio/models/xtts/` ; le premier lancement peut nécessiter un téléchargement. La référence vocale configurée est `audio/voices/homme_fr.wav`, montée dans `/voices/homme_fr.wav`.
-
-```bash
-docker compose --profile xtts build xtts
-docker compose --profile xtts run --rm -T xtts
-```
-
-Repasser `engine: kokoro` pour le script quotidien, qui impose ce moteur. La génération audio produit le MP3 local ; la publication du RSS est réalisée à l’étape suivante.
-
-### 6. Préparer et publier le podcast (optionnel)
-
-Adapter `config/podcast.yaml` : métadonnées et rétention. Définir l’URL publique de base dans `.env` avec `PODCAST_SITE_URL` ; les éditions ajoutent automatiquement `/fr/` ou `/en/`. Fournir `podcast/cover.jpg` et les identifiants dans `.env`. La clé du serveur doit être vérifiée et présente dans le fichier `known_hosts` monté par Compose ; son chemin hôte par défaut est `./podcast/known_hosts`, configurable via `PODCAST_KNOWN_HOSTS` dans `.env`.
-
-Utiliser une illustration JPEG carrée, idéalement 3 000 × 3 000 pixels en RGB. Vérifier `PODCAST_SFTP_REMOTE_PATH` depuis la session SFTP. L’adresse `PODCAST_EMAIL` apparaît publiquement dans le RSS : choisir une adresse de contact adaptée.
-
-Pour récupérer la clé du serveur, `ssh-keyscan -p 22 ftp.cluster030.hosting.ovh.net` peut l’afficher ; vérifier son empreinte auprès d’une source de confiance avant de l’ajouter au fichier `known_hosts`.
-
-Une clé SSH peut remplacer le mot de passe : la monter en lecture seule dans le service `podcast`, puis définir son chemin **dans le conteneur** via `.env` :
-
-```dotenv
-PODCAST_SFTP_KEY_FILE=/run/secrets/ovh_sftp_key
-# Configuration SFTP et adresse publique du podcast :
-PODCAST_SFTP_HOST=ftp.cluster030.hosting.ovh.net
-PODCAST_SFTP_PORT=22
-PODCAST_SFTP_REMOTE_PATH=/chemin/sftp/podcast
-PODCAST_EMAIL=contact@example.com
-PODCAST_SITE_URL=https://podcast.example.com/
-```
-
-Exemple de montage à ajouter aux volumes existants :
-
-```yaml
-      - /chemin/hote/cle_privee:/run/secrets/ovh_sftp_key:ro
-```
-
-`PODCAST_SFTP_PASSWORD` n’est pas nécessaire avec cette clé. Le programme de publication est `podcast/publish.py` ; son image est construite par `podcast/Dockerfile`.
-
-Le montage `./podcast/state:/state` conserve l’historique RSS entre les exécutions. Chaque MP3 publié reçoit un nom unique `AAAA-MM-JJ-<empreinte SHA-256>-briefing.mp3`, utilisé aussi comme identifiant RSS. Plusieurs fichiers différents publiés le même jour ajoutent plusieurs épisodes ; republier le même fichier le même jour conserve une seule entrée et sa date initiale. Le fichier local reste `output/AAAA-MM-JJ-briefing.mp3`.
-
-```bash
-# Vérifie les fichiers et leur lecture, sans connexion SFTP.
-docker compose --profile ai run --rm -T podcast --dry-run
-# Publie le MP3, l’illustration et le RSS sur le serveur configuré.
-docker compose --profile ai run --rm -T podcast
-```
-
-Après publication, vérifier le RSS à l’adresse configurée, <https://podcast.chauchard.info/fr/podcast.xml> pour le français et <https://podcast.chauchard.info/en/podcast.xml> pour l’anglais, ainsi que les liens MP3. La description des épisodes reprend les titres et les sources du Markdown (`**Sources :**`, `Sources:` ou listes de liens après un bloc sources). Si le format du briefing change, vérifier son interprétation avec `--dry-run`.
-
-Le contrôle à blanc nécessite déjà le MP3 daté, le Markdown et l’illustration. La publication transfère d’abord le MP3 et l’illustration, puis remplace atomiquement le RSS avant de supprimer les MP3 distants expirés (7 jours calendaires actuellement). Seuls les MP3 de briefing expirés portant le nom daté historique ou le nouveau nom avec empreinte sont supprimés. Conserver `podcast/state/episodes.json` : les anciens épisodes ne sont pas reconstruits depuis le serveur. Si cet historique a déjà été perdu, cette correction conserve les nouveaux épisodes mais ne restaure pas les précédents.
-
-### 7. Envoyer le briefing par mail (optionnel)
-
-Le service `mailer` transforme `output/briefing.md` en mail HTML avec titres, listes, tableaux et liens sources. Il joint aussi une version texte dans le même message. L’envoi est indépendant de l’audio et du podcast.
-
-Modifier `config/mail.yaml` :
-
-```yaml
-input: /output/briefing.md
-subject: "AI News — Briefing du {date}"
-smtp:
-  host: smtp.example.com
-  port: 587
-  security: starttls
-  auth: true
-  timeout: 30
-```
-
-`{date}` est remplacé par la date en Europe/Paris. Choisir `starttls` pour une connexion mise à niveau TLS (généralement port 587), ou `ssl` pour TLS dès la connexion (généralement port 465). La vérification du certificat est activée. `none` est réservé à un relais sans authentification (`auth: false`). L’expéditeur doit être autorisé par votre serveur SMTP.
-
-Renseigner les variables dans `.env` :
+Renseigner le serveur dans `mail.smtp` et les variables suivantes dans `.env` :
 
 ```dotenv
 SENDER="AI News <ai-news@example.com>"
@@ -285,68 +182,62 @@ SMTP_USERNAME=identifiant_smtp
 SMTP_PASSWORD=mot_de_passe_smtp
 ```
 
-Compose transmet `SENDER`, `RECIPIENT`, `SMTP_USERNAME` et `SMTP_PASSWORD` au service mail. `SENDER` et `RECIPIENT` ont priorité sur les anciennes valeurs YAML. Le module lancé directement en Python attend ces variables dans son environnement ; il ne charge pas `.env` lui-même.
+Les objets peuvent être définis par langue ; `{date}` utilise Europe/Paris.
+SMTP prend en charge STARTTLS et SSL avec vérification du certificat.
 
 ```bash
-docker compose --profile mail build mailer
-# Génère output/briefing-email.html sans connexion SMTP ni envoi.
+# Aperçu local HTML, sans connexion SMTP
 docker compose --profile mail run --rm -T mailer --dry-run
-# Envoie le briefing au destinataire configuré.
+# Envoi réel du Markdown configuré
 docker compose --profile mail run --rm -T mailer
 ```
 
-L’aperçu ne nécessite pas d’identifiants SMTP. Chaque commande mail manuelle sans `--dry-run` envoie un nouveau mail ; le pipeline quotidien mémorise les étapes terminées. Le script `run-daily.sh` envoie le mail après la génération et la vérification du Markdown, avant les étapes audio et podcast. Un échec d’envoi arrête le pipeline. Construire l’image `mailer` et renseigner la configuration SMTP avant le prochain lancement quotidien.
+Chaque envoi manuel sans `--dry-run` envoie un nouveau mail. Les marqueurs de
+reprise sont gérés par le pipeline quotidien, pas par cette commande manuelle.
 
-## Éditions anglaise puis française
+## Audio et podcast
 
-`briefing.languages: [en, fr]` active la génération des deux éditions. Les sources FR et EN restent collectées ensemble. Le regroupement utilise MiniLM multilingue ; Qwen synthétise une seule fois en anglais, puis MarianMT traduit les mêmes événements en français. Les liens et titres des sources restent dans leur langue d’origine. Une erreur de traduction arrête la génération plutôt que de publier une sélection française incomplète.
-
-Le pipeline quotidien regroupe les résultats dans cette arborescence :
-
-```text
-output/daily/2026-10-11/
-├── generated
-├── en/
-│   ├── briefing.md
-│   ├── briefing-email.html
-│   ├── 2026-10-11-briefing.mp3
-│   ├── podcast.xml
-│   ├── mail.done
-│   ├── audio.done
-│   └── podcast.done
-└── fr/
-    └── mêmes fichiers
-```
-
-Le pipeline traite mail, audio et publication anglais avant les étapes françaises. Les deux Markdown sont préparés avant les envois. Les marqueurs `.done` servent à reprendre une exécution interrompue. Le mail HTML est conservé aussi lors d’un envoi réel. Le XML local est le flux préparé pour la publication, pas un accusé de transfert.
+Kokoro utilise les modèles et voix de `audio/models/kokoro/`. Le MP3 est mono,
+à 22 050 Hz. Les débits acceptés sont `24k`, `32k`, `40k`, `48k` ; les pauses sont
+configurables entre 0 et 10 000 ms. La date préfixe le nom de sortie.
 
 ```bash
-DAY=$(TZ=Europe/Paris date +%F)
-# Générer les deux Markdown sans envoi
-docker compose --profile ai run --rm -T -e BRIEFING_DAILY_DIR="/output/daily/$DAY" embeddings python -m embeddings.briefing
-# Aperçu du mail anglais : daily/AAAA-MM-JJ/en/briefing-email.html
-docker compose --profile mail run --rm -T mailer --language en --input "/output/daily/$DAY/en/briefing.md" --dry-run
-# Générer l’audio anglais
-docker compose --profile ai run --rm -T audio --config /config/audio.yaml --language en --input "/output/daily/$DAY/en/briefing.md" --output "/output/daily/$DAY/en/briefing.mp3" --date "$DAY"
-# Vérifier la publication anglaise sans transfert
-docker compose --profile ai run --rm -T podcast --language en --date "$DAY" --dry-run
+# Génère le MP3 à partir du Markdown configuré
+docker compose --profile ai run --rm -T audio
 ```
 
-Reconstruire les images après cette mise à jour :
+Piper nécessite une voix ONNX et son fichier `.onnx.json`. XTTS utilise le service
+`xtts`, son cache de modèle et un fichier WAV de référence. Ces alternatives
+s’utilisent hors du pipeline quotidien.
+
+Le podcast publie le MP3, la couverture et un RSS par langue : `/en/podcast.xml`
+et `/fr/podcast.xml`. Configurer les métadonnées dans `podcast`, les identifiants
+SFTP et `PODCAST_SITE_URL` dans `.env`. Fournir `podcast/cover.jpg` et la clé du
+serveur vérifiée dans `podcast/known_hosts`, ou via `PODCAST_KNOWN_HOSTS`.
 
 ```bash
-docker compose --profile ai --profile mail build collector embeddings audio podcast mailer
+# Vérifie les fichiers et prépare le RSS local, sans transfert
+docker compose --profile ai run --rm -T podcast --language fr --dry-run
+# Publication SFTP réelle
+docker compose --profile ai run --rm -T podcast --language fr
 ```
 
-`config/mail.yaml` permet de surcharger `subject` dans `editions.en` et `editions.fr`. Les deux éditions utilisent `SENDER` et `RECIPIENT` définis dans `.env`. `config/audio.yaml` fournit les voix EN/FR. Dans `config/podcast.yaml`, `editions.en` définit le flux anglais sous `/en/`, son sous-répertoire SFTP `en` et `/state/episodes-en.json`. Le français utilise `/fr/`, le sous-répertoire SFTP `fr` et `/state/episodes-fr.json`. Le chemin distant de base vient de `PODCAST_SFTP_REMOTE_PATH` dans `.env` ; chaque édition ajoute `/fr` ou `/en`. Définir `PODCAST_SITE_URL` dans `.env` sans suffixe de langue ; les URL des éditions sont construites automatiquement en conservant un éventuel chemin de base.
+Le contrôle à blanc nécessite le Markdown, le MP3 daté et la couverture.
+La publication transfère les fichiers avant le remplacement atomique du RSS.
+Les fichiers MP3 distants expirés sont supprimés selon `podcast.retention_days`.
 
-Chaque flux RSS contient les épisodes de sa langue : le flux français est à `/fr/podcast.xml` et le flux anglais à `/en/podcast.xml`. Le nouveau flux français démarre avec un historique distinct ; les anciens épisodes et le flux à la racine ne sont pas déplacés automatiquement. Les titres d’épisodes portent `[FR]` ou `[EN]` et sont localisés. La description utilise des sauts de ligne HTML (`<br/>`) pour les lecteurs RSS, avec une version texte multiligne dans `itunes:summary`. Les titres et noms des sources sont conservés dans leur langue d’origine.
+Le nom distant inclut la date et l’empreinte SHA-256 du MP3. Publier le même fichier
+pour la même date conserve une seule entrée RSS et sa date de publication.
+Conserver `podcast/state/` pour préserver les épisodes.
 
-Les étapes terminées sont mémorisées dans `output/daily/AAAA-MM-JJ/`, avec les deux Markdown. Relancer le service le même jour reprend les étapes restantes et conserve la sélection. Ne pas supprimer ces fichiers pour une simple reprise. Pour régénérer volontairement toute la journée, retirer ce dossier avant de relancer : les mails seront renvoyés. Une interruption entre l’acceptation SMTP et l’écriture du marqueur peut aussi entraîner un doublon ; SMTP ne garantit pas un envoi exactement une fois.
+## Feedback
 
-La date audio/podcast est fixée au début du pipeline, même si l’exécution dépasse minuit. Les dossiers quotidiens ne sont pas purgés automatiquement. Au prochain lancement, les anciens Markdown, MP3 et marqueurs de la journée présents dans `output/.daily/` ou à la racine de `output/` sont copiés vers la nouvelle structure sans supprimer les originaux. Les mails déjà envoyés ne sont pas renvoyés. Pour revenir à une génération Markdown unique, supprimer `languages` et conserver `language: fr` ; le pipeline quotidien, lui, attend les deux éditions.
+Le mail peut afficher six motifs par article : utile, hors sujet, non applicable,
+superficiel ou promotionnel, sans nouveauté, déjà couvert. Les liens sont signés
+avec `FEEDBACK_SIGNING_SECRET` et pointent vers `FEEDBACK_URL`, définis dans `.env`.
+Le secret doit correspondre à celui du récepteur PHP et contenir au moins 32 octets.
 
-### Éviter les répétitions entre les jours
+Les options de `mail.feedback` sont :
 
 Avant la sélection, le briefing lit les `briefing.md` des sept jours précédents dans `output/daily/AAAA-MM-JJ/en/` ou, à défaut, `fr/`. Il ne compare pas les deux éditions d’une même journée, ni celle du jour en cours. Aucun historique JSON supplémentaire n’est créé. Sans briefing antérieur, aucun contrôle n’est effectué.
 
@@ -440,94 +331,44 @@ les tests, les limites d'évaluation et le retour arrière.
 | `config/feedback.yaml` | Activation, limites d’import et personnalisation (URL/secrets dans `.env`) |
 | `config/mail.yaml` | Objet par langue et paramètres SMTP (adresses dans `.env`) |
 
-Paramètres actuels du briefing : fenêtre de 24 heures, score minimum 35, plafond global de 15 événements, cible de 50 candidats Qwen, jusqu’à 8 arbitrages de déduplication. La sélection ordinaire exige une pertinence technique d’au moins 2/5 et une importance d’au moins `min_strategic_importance` (2 actuellement). La pertinence métier sert au classement ; aucun seuil minimum de pertinence métier n’est appliqué.
+Par défaut, GET affiche une confirmation et POST enregistre le vote. Le mode
+`require_confirmation: false` permet le vote direct mais expose aux votes de
+scanners mail. Ne pas suivre les liens réels pour un contrôle automatique.
 
-Les fichiers de configuration du briefing sont montés depuis l’hôte. Ceux du collecteur et du scorer sont également montés depuis l’hôte. Le contexte métier du prompt Qwen reste écrit dans `embeddings/briefing.py` ; modifier le YAML ne le remplace pas.
+`feedback/importer.py` fournit la récupération authentifiée, le stockage
+PostgreSQL puis l’acquittement des identifiants enregistrés. Les votes d’article
+et les votes globaux sont stockés séparément ; les répétitions connues ne créent
+pas de doublon. La synchronisation n’est pas intégrée à `run-daily.sh` et aucun
+entraînement automatique n’est implémenté.
 
-## Installer le lancement quotidien comme service
+## Planification et journaux
 
-Après `./init-repo.sh`, configurer et vérifier SMTP, SFTP et la clé du serveur : `run-daily.sh` envoie le mail et publie le podcast à chaque exécution. Sur une machine Linux avec systemd, Docker et cron :
+Sur Linux avec systemd, cron et logrotate :
 
 ```bash
-# Debian/Ubuntu, si cron est absent
-sudo apt install cron logrotate
-# Déployer le service et la tâche quotidienne
 sudo ./post-install.sh
 ```
 
-Le script installe `/etc/systemd/system/ai-news.service`, `/etc/cron.d/ai-news` et `/etc/logrotate.d/ai-news`, recharge systemd et active le service cron. Il peut être relancé ; les fichiers remplacés sont sauvegardés à côté avec un suffixe `.bak.*`. Le chemin du dépôt est déduit de l’emplacement du script (par défaut `/opt/ai-news`). Relancer la post-installation si le dépôt est déplacé.
-
-Le service est de type `oneshot`, exécuté en root, sans limite de durée, avec les sorties dans le journal systemd. Il démarre `run-daily.sh` depuis la racine du dépôt. Le cron contient :
-
-```cron
-0 4 * * * root /usr/bin/systemctl start --no-block ai-news.service
-```
-
-L’installation ne lance pas le pipeline immédiatement. Cron le déclenche chaque jour à **04:00 selon le fuseau du serveur** : vérifier avec `timedatectl`. Pour utiliser l’heure française, configurer le serveur avec `sudo timedatectl set-timezone Europe/Paris`. Le `TZ=Europe/Paris` du pipeline règle ses dates, pas l’heure de déclenchement du cron.
+Le script installe le service `ai-news.service`, un cron quotidien à **04:00 selon
+le fuseau du serveur** et la rotation des journaux. Il ne lance pas le pipeline
+immédiatement. Le service exécute le pipeline complet, avec mail et publication.
 
 ```bash
-# Déclencher une exécution manuelle (mail et publication inclus)
-sudo systemctl start --no-block ai-news.service
-# Consulter l’état et suivre les journaux
 sudo systemctl status ai-news.service
 sudo journalctl -u ai-news.service -f
-# Consulter les fichiers installés
-systemctl cat ai-news.service
-cat /etc/cron.d/ai-news
-```
-
-Après une exécution réussie, un service `oneshot` revient normalement à l’état `inactive (dead)`. Consulter le résultat avec `systemctl show ai-news.service -p Result -p ExecMainStatus`. Systemd ne démarre pas une deuxième instance tant que la première est active ; le verrou du pipeline protège aussi les lancements directs.
-
-Le pipeline écrit toutes ses sorties standard et erreurs (commandes Docker incluses) dans `/var/log/ai-news.log`, tout en les conservant dans le journal systemd. Les lancements directs de `run-daily.sh` utilisent aussi ce fichier. Le journal est réservé à root (mode `0640`). Les logs internes des services persistants PostgreSQL/Ollama restent accessibles avec `docker compose logs`.
-
-Logrotate effectue une rotation quotidienne avec sept archives et suppression des archives de plus de sept jours. Les archives sont compressées à partir de la deuxième rotation. `copytruncate` permet à une exécution en cours de continuer à écrire ; une très courte fenêtre de perte est possible pendant la copie/troncature. La rotation est exécutée par `logrotate.timer` ou le cron quotidien de la distribution.
-
-```bash
-# Déployer ou mettre à jour la journalisation et sa rotation
-sudo ./post-install.sh
 sudo tail -f /var/log/ai-news.log
-# Vérifier la configuration sans effectuer de rotation
-sudo logrotate --debug /etc/logrotate.d/ai-news
 ```
 
-Pour retirer la planification (sans interrompre une exécution en cours) :
+Le verrou `/run/ai-news.lock` empêche deux pipelines simultanés. Le journal
+`/var/log/ai-news.log` reçoit les sorties et erreurs ; logrotate conserve sept
+archives avec compression différée. Les journaux de PostgreSQL et Ollama restent
+accessibles par `docker compose logs`.
 
-```bash
-sudo rm -f /etc/cron.d/ai-news
-sudo rm -f /etc/systemd/system/ai-news.service
-sudo systemctl daemon-reload
-```
+## Limites et repères
 
-### Dépendances et téléchargements pendant l’exécution
+Les articles sans date sont exclus du briefing. Une date RSS erronée peut fausser
+la sélection. La vue `unique_articles` déduplique par GUID ; le briefing déduplique
+les événements. Les synthèses et traductions demandent une vérification humaine.
 
-Les paquets pip sont installés à la construction des images. L’image audio inclut aussi `en_core_web_sm`, utilisé par Misaki pour l’anglais : sans ce modèle, Misaki déclenche automatiquement son installation au lancement du conteneur, qui serait répétée avec `run --rm`. Les dépendances audio sont regroupées dans `audio/requirements.txt`. `sacremoses` est inclus dans les dépendances du briefing pour MarianMT.
-
-Après une modification de ces dépendances :
-
-```bash
-docker compose --profile ai build audio embeddings
-```
-
-Les téléchargements pip pendant cette construction sont normaux. Les poids Kokoro sont fournis par `init-repo.sh`, et les modèles du briefing sont conservés dans le volume `embeddings_models`.
-
-## Diagnostic et automatisation
-
-```bash
-# État et journaux des services persistants
-docker compose --profile ai ps
-docker compose logs --tail=100 postgres ollama
-docker stats --no-stream
-
-# Analyse facultative des similarités (aucune écriture en base)
-docker compose --profile ai run --rm -T embeddings python -m embeddings.worker
-
-# Statut des collectes
-docker compose exec -T postgres sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT status, COUNT(*) FROM collection_runs GROUP BY status;"'
-```
-
-`run-daily.sh` enchaîne infrastructure, collecte, diagnostic MiniLM, briefing, envoi du mail, audio et publication. Le scoring `app.scorer` est exécuté après la collecte. Son verrou `/run/ai-news.lock` exige les permissions adaptées. Le script `post-install.sh` installe la planification décrite ci-dessous.
-
-Autres limites à garder en tête : les articles sans date de publication sont exclus du briefing ; la vue SQL déduplique uniquement par GUID ; les évaluations Qwen sont répétées à chaque exécution. Les résumés et priorités produits par les modèles demandent une vérification des sources avant une décision opérationnelle.
-
-Documentation vérifiée par lecture du code. L’exécution complète PostgreSQL/Ollama/traduction/audio/SFTP n’a pas été relancée pour cette revue.
+Les scripts du schéma PostgreSQL sont dans `app/sql/`. Les tests sont dans `tests/`.
+Les règles de contribution et de validation sont dans [AGENTS.md](AGENTS.md).

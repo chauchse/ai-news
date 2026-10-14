@@ -14,6 +14,8 @@ from zoneinfo import ZoneInfo
 import bleach
 import markdown
 import yaml
+from project_config import load_section
+from mailer.feedback_links import MARKER, briefing_entries, links, newsletter_identity
 
 
 def address(value):
@@ -25,8 +27,8 @@ def address(value):
     return value
 
 
-def load_config(path):
-    cfg = yaml.safe_load(Path(path).read_text(encoding='utf-8'))
+def load_config(path=None):
+    cfg = load_section('mail', path)
     if not isinstance(cfg, dict) or not isinstance(cfg.get('smtp'), dict):
         raise ValueError('Configuration mail invalide : section smtp attendue')
     for key in ('sender', 'recipient'):
@@ -66,6 +68,48 @@ def render_html(text, language="fr"):
             'background:#f3f4f6;color:#172033;font-family:Arial,sans-serif;line-height:1.6">'
             '<div style="max-width:760px;margin:auto;padding:24px;background:white">'
             + body + '</div></body></html>')
+
+
+def add_feedback(text, cfg):
+    options = cfg.get('feedback', {})
+    enabled = options.get('enabled', True)
+    if type(enabled) is not bool:
+        raise ValueError('mail.feedback.enabled doit être booléen')
+    url = os.getenv('FEEDBACK_URL', '').strip()
+    if not enabled or not url:
+        return MARKER.sub('', text)
+    days = options.get('link_days', 90)
+    if type(days) is not int or days < 1:
+        raise ValueError('Durée des liens invalide')
+    day, blocks, entries = briefing_entries(text)
+    # Direct-vote PHP recovers submitted_at as exp - link_seconds.
+    # Use an exact duration: calendar arithmetic across DST shifts that date.
+    issued = int(datetime.fromisoformat(day).replace(tzinfo=ZoneInfo('Europe/Paris')).timestamp())
+    now = time.time()
+    if issued > now:
+        raise ValueError('Date du briefing future')
+    expires = issued + days * 86400
+    if expires <= now:
+        raise ValueError('Liens feedback expirés')
+    language = cfg.get('language', 'fr')
+    for entry in entries:
+        index, pid = entry['index'], entry['presentation_id']
+        block = blocks[index]
+        values = links(pid, url, os.getenv('FEEDBACK_SIGNING_SECRET', ''), expires, language)
+        label = 'Votre avis' if language == 'fr' else 'Your feedback'
+        buttons = '**' + label + '** : ' + ' · '.join('[' + name + '](' + link + ')' for name, link in values)
+        blocks[index] = MARKER.sub('', block).rstrip() + '\n\n' + buttons + '\n\n'
+    newsletter_enabled = options.get('newsletter_enabled', False)
+    if type(newsletter_enabled) is not bool:
+        raise ValueError('mail.feedback.newsletter_enabled doit être booléen')
+    if newsletter_enabled:
+        values = links(newsletter_identity(day), url, os.getenv('FEEDBACK_SIGNING_SECRET', ''),
+                       expires, language, briefing_date=day)
+        label = ('Comment trouvez-vous l’équilibre de cette newsletter ?' if language == 'fr'
+                 else 'How balanced is this newsletter?')
+        buttons = '**' + label + '** : ' + ' · '.join('[' + name + '](' + link + ')' for name, link in values)
+        blocks.append('\n\n---\n\n' + buttons + '\n')
+    return ''.join(blocks)
 
 
 def build_message(cfg):
@@ -127,8 +171,9 @@ def send_message(cfg, message):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', default='/config/mail.yaml')
+    parser.add_argument('--config', help='Configuration globale ; défaut : config.yaml / AI_NEWS_CONFIG')
     parser.add_argument('--dry-run', action='store_true', help='Créer un aperçu HTML sans connexion SMTP')
+    parser.add_argument('--date', help='Date de l’édition, AAAA-MM-JJ')
     parser.add_argument('--preview', help='Chemin HTML personnalisé ; sinon briefing-email-<langue>.html')
     parser.add_argument('--language', choices=['en', 'fr'])
     parser.add_argument('--input')
@@ -143,6 +188,8 @@ def main():
             cfg['subject'] = f"[{args.language.upper()}] " + cfg['subject']
         if args.input:
             cfg['input'] = args.input
+        if args.date:
+            cfg['edition_date'] = args.date
         stage = "lecture du Markdown et préparation du message"
         message = build_message(cfg)
         stage = "écriture de l’aperçu HTML"

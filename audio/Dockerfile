@@ -24,3 +24,5 @@ WORKDIR /app
 COPY audio/tts.py /app/tts.py
 
 ENTRYPOINT ["python", "/app/tts.py"]
+
+COPY project_config.py /app/project_config.py

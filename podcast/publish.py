@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 import paramiko
-import yaml
+from project_config import load_section
 
 LOG = logging.getLogger('podcast')
 ITUNES = 'http://www.itunes.com/dtds/podcast-1.0.dtd'
@@ -32,8 +32,8 @@ SOURCE_RE = re.compile(r'^\s*(?:[-*]\s*)?(?:\*\*)?Sources?\s*(?:\*\*)?\s*:\s*(?:
 MD_LINK_RE = re.compile(r'\[([^\]]+)\]\((https?://[^)\s]+)(?:\s+[^)]*)?\)')
 
 
-def config_load(path):
-    data = yaml.safe_load(Path(path).read_text(encoding='utf-8')) or {}
+def config_load(path=None):
+    data = load_section('podcast', path)
     if not isinstance(data, dict):
         raise ValueError('Podcast config must be a YAML mapping')
     sftp = data.setdefault('sftp', {})
@@ -134,15 +134,18 @@ def get_audio_duration(path):
         return None
 
 
-def append_episode(state, episode_file, articles, now, retention, language="fr"):
+def append_episode(state, episode_file, articles, now, retention, language="fr", edition_date=None):
     """Keep distinct audio files, and make retries of the same file idempotent."""
     cutoff = now.date() - dt.timedelta(days=retention - 1)
     state = [ep for ep in state if dt.date.fromisoformat(ep['date']) >= cutoff]
+    day = edition_date or now.date()
+    if day < cutoff or day > now.date():
+        raise ValueError('Date d’édition hors de la fenêtre de rétention actuelle')
     digest = hashlib.sha256()
     with episode_file.open('rb') as audio:
         for chunk in iter(lambda: audio.read(1024 * 1024), b''):
             digest.update(chunk)
-    filename = f'{now.date().isoformat()}-{digest.hexdigest()}-briefing.mp3'
+    filename = f'{day.isoformat()}-{digest.hexdigest()}-briefing.mp3'
     existing = next((ep for ep in state if ep['filename'] == filename), None)
     if existing:
         # Refresh metadata on retry without duplicating or redating the episode.
@@ -150,7 +153,7 @@ def append_episode(state, episode_file, articles, now, retention, language="fr")
         existing['language'] = language
         return state, existing
     episode = {
-        'date': now.date().isoformat(),
+        'date': day.isoformat(),
         'filename': filename,
         'description': episode_description(articles, language),
         'language': language,
@@ -250,7 +253,7 @@ def atomic_upload(sftp, local, remote):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='/config/podcast.yaml')
+    parser.add_argument('--config', help='Configuration globale ; défaut : config.yaml / AI_NEWS_CONFIG')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--language', choices=['en', 'fr'])
     parser.add_argument('--date', help='Edition date, YYYY-MM-DD')
@@ -274,16 +277,14 @@ def main():
     # Use Europe/Paris including daylight-saving transitions.
     from zoneinfo import ZoneInfo
     now = dt.datetime.now(ZoneInfo('Europe/Paris'))
-    if args.date:
-        edition_date = dt.date.fromisoformat(args.date)
-        now = dt.datetime.combine(edition_date, now.timetz())
+    edition_date = dt.date.fromisoformat(args.date) if args.date else now.date()
     cutoff = now.date() - dt.timedelta(days=retention - 1)
     output_dir = Path(cfg.get('output_dir', '/output'))
     if args.language:
-        output_dir = output_dir / 'daily' / now.date().isoformat() / args.language
+        output_dir = output_dir / 'daily' / edition_date.isoformat() / args.language
     state_file = Path(cfg.get('state_file', '/state/episodes.json'))
     markdown_file = output_dir / cfg.get('briefing_file', 'briefing.md')
-    episode_file = output_dir / f"{now.date().isoformat()}-{cfg.get('audio_file', 'briefing.mp3')}"
+    episode_file = output_dir / f"{edition_date.isoformat()}-{cfg.get('audio_file', 'briefing.mp3')}"
     if not episode_file.is_file():
         raise FileNotFoundError(f'MP3 absent : {episode_file}')
     if not markdown_file.is_file():
@@ -298,7 +299,7 @@ def main():
     else:
         state = []
     state, new_ep = append_episode(state, episode_file, articles, now, retention,
-                                   "en" if cfg["podcast"].get("language", "fr-FR").startswith("en") else "fr")
+                                   "en" if cfg["podcast"].get("language", "fr-FR").startswith("en") else "fr", edition_date=edition_date)
     cover = Path(cfg.get('cover_file', '/podcast/cover.jpg'))
     if not cover.is_file():
         raise FileNotFoundError(f'Illustration absente : {cover}')
