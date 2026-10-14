@@ -1,8 +1,0 @@
-.git
-.env
-.env.*
-.venv
-**/__pycache__
-**/*.pyc
-output
-feedback/private

@@ -6,8 +6,7 @@ output/
 audio/models/
 config/watchlist.yaml
 *.log
-AGENTS.md
-CADRAGE.md
+
 podcast/state/
 
 podcast/known_hosts
@@ -16,5 +15,7 @@ config/.sources.lock
 config/.sources-*.tmp
 config/sources.yaml.bak
 
-# Feedback private deployment data (never commit secrets or live votes).
-feedback/private/
+# Global configuration: retirement lock, atomic-write temporaries and backup.
+.config.lock
+.config-*.tmp
+config.yaml.bak

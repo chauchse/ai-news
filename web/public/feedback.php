@@ -10,8 +10,18 @@ set_error_handler(static function(int $severity): never {
 // or edit this constant to an absolute path OUTSIDE the document root.
 const PRIVATE_CONFIG = '/REPLACE/private/ai-news-feedback/config.php';
 const REASONS = ['useful', 'off_topic', 'not_applicable', 'shallow_or_promotional', 'not_new', 'already_covered'];
+const NEWSLETTER_REASONS = ['newsletter_balanced', 'newsletter_too_cyber', 'newsletter_too_ai'];
+const NEWSLETTER_LABELS = ['Équilibrée', 'Trop cyber', 'Trop IA'];
 const LABELS = ['Utile', 'Hors de mes sujets', 'Pas applicable chez moi', 'Trop superficiel / promotionnel', 'Pas assez nouveau', 'Déjà traité'];
 
+function newsletter(array $p): bool { return in_array($p['reason'] ?? null, NEWSLETTER_REASONS, true); }
+function newsletter_identity(array $p): bool {
+    $day = $p['briefing_date'] ?? null;
+    if (!is_string($day)) return false;
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $day);
+    if ($date === false || $date->format('Y-m-d') !== $day) return false;
+    return ($p['presentation_id'] ?? null) === hash('sha256', canonical(['scope'=>'newsletter-feedback-v1','briefing_date'=>$day]));
+}
 function fail(int $status, string $message): never {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
@@ -45,10 +55,11 @@ function token(mixed $raw, string $secret): array {
     if (!is_array($p) || sign($p, $secret) !== $raw) fail(400, 'Format invalide');
     $required = ['v', 'kind', 'presentation_id', 'reason', 'link_id', 'exp'];
     if (($p['kind'] ?? null) === 'form') $required = array_merge($required, ['submission_id', 'submitted_at']);
+    if (newsletter($p)) { $required[] = 'briefing_date'; if (!newsletter_identity($p)) fail(400, 'Newsletter invalide'); }
     $keys = array_keys($p); sort($keys); sort($required);
     if ($keys !== $required || $p['v'] !== 1 || !in_array($p['kind'], ['link', 'form'], true)
         || !identifier($p['presentation_id']) || !identifier($p['link_id'])
-        || !in_array($p['reason'], REASONS, true) || !is_int($p['exp']) || $p['exp'] < time()) fail(400, 'Lien invalide ou expiré');
+        || !in_array($p['reason'], array_merge(REASONS, NEWSLETTER_REASONS), true) || !is_int($p['exp']) || $p['exp'] < time()) fail(400, 'Lien invalide ou expiré');
     if ($p['kind'] === 'form' && (!identifier($p['submission_id']) || !timestamp($p['submitted_at'])
         || $p['submitted_at'] > utc())) fail(400, 'Formulaire invalide');
     return $p;
@@ -57,9 +68,10 @@ function valid_return(mixed $r, string $name): bool {
     if (!is_array($r)) return false;
     $keys = array_keys($r); sort($keys);
     $expected = ['schema_version','id','submission_id','presentation_id','reason','received_at','submitted_at']; sort($expected);
+    if (newsletter($r)) { $expected[]='briefing_date'; sort($expected); if (!newsletter_identity($r)) return false; }
     return $keys === $expected && $r['schema_version'] === 1 && identifier($r['id'])
         && $name === $r['id'] . '.json' && $r['id'] === $r['submission_id']
-        && identifier($r['presentation_id']) && in_array($r['reason'], REASONS, true)
+        && identifier($r['presentation_id']) && in_array($r['reason'], array_merge(REASONS, NEWSLETTER_REASONS), true)
         && timestamp($r['received_at']) && timestamp($r['submitted_at'])
         && $r['submitted_at'] <= $r['received_at'] && $r['received_at'] <= utc();
 }
@@ -73,7 +85,7 @@ function read_return(string $path, array $cfg): ?array {
 }
 function page(string $body): never {
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI News — Votre avis</title><body><main><h1>Votre avis sur cette news</h1>' . $body . '</main></body></html>'; exit;
+    echo '<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI News — Votre avis</title><body><main><h1>Votre avis sur AI News</h1>' . $body . '</main></body></html>'; exit;
 }
 function esc(string $value): string { return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
@@ -166,10 +178,12 @@ try {
         $p['kind']='form'; $p['submission_id']=bin2hex(random_bytes(32)); $p['submitted_at']=utc();
         $p['exp']=min($p['exp'],time()+$cfg['form_seconds']);
         $forms='';
-        foreach (REASONS as $i=>$reason) {
+        $reasons = newsletter($p) ? NEWSLETTER_REASONS : REASONS;
+        $labels = newsletter($p) ? NEWSLETTER_LABELS : LABELS;
+        foreach ($reasons as $i=>$reason) {
             $f=$p; $f['reason']=$reason;
             // Motif is signed separately; the submission identity remains unchanged.
-            $forms.='<form method="post" action="?action=vote"><input type="hidden" name="token" value="'.esc(sign($f,$cfg['signing_secret'])).'"><button type="submit">'.($reason===$p['reason']?'Confirmer : ':'').esc(LABELS[$i]).'</button></form>';
+            $forms.='<form method="post" action="?action=vote"><input type="hidden" name="token" value="'.esc(sign($f,$cfg['signing_secret'])).'"><button type="submit">'.($reason===$p['reason']?'Confirmer : ':'').esc($labels[$i]).'</button></form>';
         }
         page('<p>Choisissez un motif. Aucun commentaire nécessaire.</p>'.$forms);
     }
@@ -177,6 +191,7 @@ try {
     $id=$p['submission_id'];
     $r=['schema_version'=>1,'id'=>$id,'submission_id'=>$id,'presentation_id'=>$p['presentation_id'],
         'reason'=>$p['reason'],'received_at'=>utc(),'submitted_at'=>$p['submitted_at']];
+    if (newsletter($p)) $r['briefing_date']=$p['briefing_date'];
     $lock=fopen($dir.'/.lock','c');
     if ($lock===false || !flock($lock,LOCK_EX | LOCK_NB)) fail(503,'Verrou indisponible');
     $path=$dir.'/'.$id.'.json';

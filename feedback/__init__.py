@@ -1,1 +1,1 @@
-"""Local feedback, identity and learning; public receiver is PHP only."""
+"""Local feedback synchronization and descriptive analysis, without ML."""
