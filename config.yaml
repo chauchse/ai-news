@@ -1752,6 +1752,8 @@ healthcheck:
 mail:
   input: /output/briefing.md
   subject: "AI News — Briefing du {date}"
+  feedback:
+    newsletter_enabled: true
   smtp:
     host: ssl0.ovh.net
     port: 587
