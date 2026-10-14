@@ -478,6 +478,10 @@ collection:
   - name: "IT - This Week in Tech"
     url: "https://feeds.twit.tv/twit.xml"
     enabled: false
+  
+  - name: "Synaktiv"
+    url: "https://www.synacktiv.com/en/feed/lastblog.xml"
+    enabled: true
 
 # ==========================================================================
 # Score historique : thèmes, mots-clés et pondérations.
@@ -1748,8 +1752,6 @@ healthcheck:
 mail:
   input: /output/briefing.md
   subject: "AI News — Briefing du {date}"
-  feedback:
-    newsletter_enabled: true
   smtp:
     host: ssl0.ovh.net
     port: 587

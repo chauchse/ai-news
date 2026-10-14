@@ -1,29 +1,47 @@
 # AI News
 
-Veille RSS/Atom sur l’IA, l’IT, la cybersécurité et les risques, avec un contexte métier de casino physique au Luxembourg. Le projet produit un briefing français, un MP3 et, en option, un podcast publié par SFTP.
+Veille RSS/Atom sur l’IA, l’IT, la cybersécurité et les risques, avec un contexte
+métier de casino physique au Luxembourg. Le projet produit un briefing en anglais
+et en français, des mails HTML et texte, des MP3 et des flux RSS de podcast.
+Les modèles fonctionnent localement après téléchargement.
 
-## Flux de traitement
+![Architecture et flux du projet AI News](image.png)
 
-```text
-config/sources.yaml
-  → Collecte RSS/Atom et normalisation HTML
-  → PostgreSQL : articles et historique de collecte
-  → Scoring par mots-clés, fraîcheur, longueur et bonus métier
-  → Vue unique_articles : une ligne par GUID
-  → Briefing : filtres, watchlists, détection CVE/CVSS
-  → MiniLM : classification et regroupement des événements
-  → Qwen via Ollama : déduplication complémentaire, évaluation et sélection
-  → Qwen : titres et résumés anglais
-  → MarianMT + glossaire : traduction française
-  → output/briefing.md
-  → Mail HTML + texte via SMTP (optionnel)
-  → Kokoro : output/AAAA-MM-JJ-briefing.mp3
-  → SFTP : MP3, illustration et podcast.xml
-```
+Le schéma distingue les traitements locaux, les modèles, les services externes
+et les opérations manuelles. Les retours utilisateurs sont stockés séparément
+du pipeline éditorial : aucun apprentissage automatique n'est implémenté.
 
-La collecte et le scoring écrivent en base. Le briefing lit la base et écrit le Markdown ; la traçabilité optionnelle des retours conserve aussi ses évaluations Qwen après activation. Les modèles fonctionnent localement après téléchargement initial. Les priorités P1/P2 sont des signaux textuels provisoires, à vérifier dans les sources.
+## Fonctionnement
 
-Le regroupement du briefing est autonome. `embeddings.worker` est un outil de diagnostic qui affiche des similarités ; il ne calcule aucun score et ne stocke aucun groupe.
+1. Collecte des sources activées et normalisation des articles dans PostgreSQL.
+2. Scoring par mots-clés, fraîcheur, longueur du contenu et bonus métier.
+3. Filtrage des articles, règles de veille et détection des indices CVE/CVSS.
+4. Classification et regroupement des événements avec MiniLM.
+5. Arbitrage des doublons, évaluation et synthèse anglaise avec Qwen via Ollama.
+6. Traduction française avec MarianMT et protection des termes du glossaire.
+7. Génération des Markdown, mails, MP3 et podcasts.
+
+Les éditions EN et FR partagent la même sélection et les mêmes sources.
+Les titres et noms des sources restent dans leur langue d’origine.
+Les priorités P1/P2 sont des indices textuels, pas des confirmations de gravité
+ou d’exploitation. Une sélection peut contenir moins d’événements que le plafond.
+
+Le contrôle inter-journalier compare les briefings précédents avec MiniLM puis
+Qwen pour distinguer répétition et évolution substantielle. Il utilise les
+Markdown existants, sans fichier d’historique supplémentaire.
+
+Le pipeline lit `unique_articles`, qui déduplique les lignes par GUID. Le
+regroupement en événements est une étape distincte : identifiants CVE/ZDI,
+URL, titres et similarité sont examinés avant les arbitrages Qwen. Les sujets
+retenus sont répartis entre alertes de sécurité et veille stratégique ; les
+alertes P1/P2 non retenues peuvent apparaître dans une annexe de liens.
+
+Les réglages fournis sont une fenêtre de 24 heures, un score historique minimum
+de 35 avec exceptions pour la veille et les vulnérabilités, un plafond de
+15 événements et une cible de 50 candidats pour l'évaluation Qwen. L'historique
+couvre 7 jours avec une présélection sémantique à 0,72. Les cibles par catégorie
+sont souples, avec une dérogation pour les indices P1. Ces réglages sont dans
+`briefing.briefing` ; le nombre réellement publié peut être inférieur au plafond.
 
 ## Installation
 
@@ -53,38 +71,85 @@ PostgreSQL et Ollama sont persistants ; les autres services s’exécutent à la
 Les limites mémoire s’additionnent : 6 Go pour `embeddings`, 4 Go pour Ollama et
 2 Go pour `audio` dans Compose. Les modèles sont exclus de Git.
 
+L'initialisation applique les scripts SQL `001` à `006`, télécharge Qwen 2.5:3b,
+MiniLM multilingue et MarianMT EN→FR, et prépare les modèles audio. Elle écrit en
+base et télécharge des fichiers : ce n'est pas une commande de diagnostic.
+L'option `--models-only` prépare uniquement les modèles audio.
+
+### Services et persistance
+
+| Service Compose | Exécution et stockage |
+|---|---|
+| `postgres` | PostgreSQL 17 persistant, volume `postgres_data` |
+| `collector` | À la demande ; collecte, normalisation et scoring ; dépôt monté dans `/workspace` |
+| `embeddings` | Profil `ai` ; sélection, synthèse et traduction ; cache `embeddings_models` et `/output` |
+| `ollama` | Profil `ai` ; serveur local Qwen, volume `ollama_models`, limite 4 Go |
+| `audio` | Profil `ai` ; Kokoro ou Piper ; modèles, voix et `/output` montés depuis l'hôte |
+| `podcast` | Profil `ai` ; SFTP, RSS, couverture et états par langue ; limite 256 Mo |
+| `mailer` | Profil `mail` ; SMTP, aperçus et diagnostic du healthcheck |
+| `xtts` | Profil optionnel `xtts`, limite 6 Go ; hors pipeline quotidien |
+
+Les scripts d'orchestration et systemd tournent sur l'hôte. Aucun serveur web,
+planificateur ou traducteur autonome supplémentaire n'est défini dans Compose.
+Le PHP de feedback et les fichiers du podcast sont hébergés à distance.
+
 ## Configuration
 
 Les réglages applicatifs sont dans `config.yaml`, chargés par `project_config.py`.
 Les secrets et adresses de déploiement restent dans `.env`.
 
+| Section | Rôle |
+|---|---|
+| `collection` | Sources RSS/Atom et désactivation automatique |
+| `scoring` | Poids communs des domaines, mots-clés et plafonds du score |
+| `briefing.briefing` | Langues, sélection, historique et déduplication |
+| `briefing.prompts` | Instructions Qwen et gabarits de messages |
+| `briefing.llm` | Modèle et température |
+| `briefing.scoring` | Bonus et contexte métier |
+| `semantic_scoring` | Descriptions des domaines utilisées pour la classification MiniLM |
+| `watchlists` | Inclusions, exclusions et technologies suivies |
+| `glossary` | Termes protégés et traductions |
+| `audio` | Moteur, voix, pauses et débit |
+| `podcast` | Métadonnées, éditions et rétention |
+| `mail` | SMTP, objets et options de feedback |
+| `healthcheck` | Calendrier, délai, journal, alertes et étapes autorisées à la reprise |
+
+`scoring.domain_weights` alimente le bonus métier et est exposé aux profils
+sémantiques par le chargeur. La classification actuelle de MiniLM choisit le
+domaine par similarité, sans appliquer ces poids. Les poids doivent être des
+nombres finis positifs ou nuls. `scoring.topics[].max_points` définit les plafonds
+du score par mots-clés.
+
+`briefing.briefing.strategic_topics` définit les motifs de reconnaissance, leur
+ordre de priorité, la limite de résumé analysée et le thème de repli.
+Le premier motif correspondant détermine le thème. Cet ordre sert aussi à
+répartir les candidats entre thèmes.
+
+Les prompts et leurs champs sont validés au chargement. Conserver les noms des
+champs entre accolades ; doubler les accolades pour un JSON littéral (`{{`, `}}`).
+MiniLM et MarianMT reçoivent des textes à encoder ou traduire, sans prompt
+conversationnel.
+
+Modifier le YAML seul ne régénère aucune édition et n’envoie aucun mail immédiat.
+Les services et tâches planifiées prennent en compte les réglages au lancement
+suivant, notamment les autorisations de reprise du healthcheck.
+Après modification du code ou des dépendances, reconstruire les images concernées :
+
 ```bash
-docker compose --profile ai config --quiet
-docker compose --profile ai build collector embeddings audio podcast
-docker compose --profile ai up -d --wait postgres ollama
-docker compose exec ollama ollama pull qwen2.5:3b
-```
-
-PostgreSQL et Ollama restent démarrés. Les autres services s’exécutent à la demande. Le profil `xtts` est une alternative audio distincte. Les limites mémoire des conteneurs s’additionnent : 6 Go pour `embeddings`, 4 Go pour Ollama, 2 Go pour `audio` ; surveiller la mémoire sur une machine de 8 Go.
-
-### 3. Initialiser le schéma SQL
-
-Compose ne monte pas de scripts d’initialisation PostgreSQL. Sur une base neuve, appliquer les fichiers dans l’ordre :
-
-```bash
-for sql in app/sql/001_initial_schema.sql \
-           app/sql/002_normalized_content.sql \
-           app/sql/003_article_scoring.sql \
-           app/sql/004_unique_articles.sql \
-           app/sql/005_feedback.sql; do
-  docker compose exec -T postgres sh -c \
-    'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$sql" || break
-done
+docker compose --profile ai --profile mail build collector embeddings audio podcast mailer
+# Alternative XTTS uniquement
+docker compose --profile xtts build xtts
 ```
 
 Le collecteur monte le dépôt en écriture pour mettre à jour les sources ; les autres
-services lisent `config.yaml` en lecture seule. Pour une copie de configuration,
-utiliser `AI_NEWS_CONFIG` en Python local ou `--config` pour mail, audio et podcast.
+services lisent `config.yaml` en lecture seule. Le code exécuté reste celui des
+images : une modification Python nécessite leur reconstruction. Pour une copie
+de configuration, utiliser `AI_NEWS_CONFIG` en Python local ou `--config` pour
+mail, audio, podcast et le module de healthcheck.
+
+La CLI `python -m project_config SECTION CLE` affiche uniquement une valeur
+scalaire, par exemple `python -m project_config healthcheck grace_hours`.
+Pour lire une section complexe, utiliser `load_section` depuis Python.
 
 ## Collecte et scoring
 
@@ -128,6 +193,7 @@ output/daily/AAAA-MM-JJ/
 │   ├── briefing.md
 │   ├── briefing-email.html
 │   ├── AAAA-MM-JJ-briefing.mp3
+│   ├── podcast.xml
 │   ├── mail.done
 │   ├── audio.done
 │   └── podcast.done
@@ -139,6 +205,21 @@ Les marqueurs permettent la reprise sans répéter les étapes terminées. Les a
 ne créent pas de marqueur d’envoi. La date est fixée en Europe/Paris au début du
 pipeline. Les dossiers quotidiens ne sont pas purgés automatiquement.
 
+`generated` valide les deux Markdown ensemble ; il n'existe pas de marqueur
+individuel pour chaque synthèse ou pour la traduction FR. Les fichiers Markdown
+sont remplacés atomiquement, langue par langue. Une erreur de traduction peut
+donc laisser l'EN présent, le FR absent et aucun marqueur `generated`.
+
+MarianMT traduit les titres et synthèses par phrases, avec protection des termes
+du glossaire. Une entrée trop longue, une sortie vide ou limitée, ou un marqueur
+perdu/dupliqué bloque la génération FR. `glossary.case_sensitive_terms` permet
+de distinguer un sigle d'un mot courant, notamment `FIRST` de `first`.
+Les titres des sources et leurs liens sont conservés sans traduction.
+
+Hors pipeline, sans `BRIEFING_DAILY_DIR`, le chemin de base est
+`BRIEFING_OUTPUT`, par défaut `/output/briefing.md`. Avec les deux langues,
+les fichiers deviennent `/output/briefing-en.md` et `/output/briefing-fr.md`.
+
 Pour évaluer la sélection seule :
 
 ```bash
@@ -148,7 +229,8 @@ docker compose --profile ai run --rm -T \
 
 Cette commande charge MiniLM et appelle Qwen, sans synthèse, traduction ni écriture
 Markdown. `embeddings.worker` est un diagnostic de similarité, sans scoring ni
-stockage de groupes.
+stockage de groupes ; il n'est pas appelé par `run-daily.sh`. La sélection et
+les évaluations du briefing ne sont pas persistées dans les tables de feedback.
 
 ## Éditions rétrospectives
 
@@ -168,7 +250,9 @@ configuration sont ceux du lancement.
 
 Préparer plusieurs journées dans l’ordre chronologique. Les éditions ultérieures
 ne sont pas réécrites. Des Markdown présents sans marqueur `generated` arrêtent
-la reprise pour permettre leur vérification. La publication est limitée par la
+la préparation rétrospective ordinaire pour permettre leur vérification.
+Le mode `--healthcheck` suit les règles de reprise décrites plus bas et peut
+relancer la génération bilingue complète. La publication est limitée par la
 rétention du podcast ; les liens de feedback suivent leur propre expiration.
 
 ## Mail
@@ -212,8 +296,12 @@ s’utilisent hors du pipeline quotidien.
 
 Le podcast publie le MP3, la couverture et un RSS par langue : `/en/podcast.xml`
 et `/fr/podcast.xml`. Configurer les métadonnées dans `podcast`, les identifiants
-SFTP et `PODCAST_SITE_URL` dans `.env`. Fournir `podcast/cover.jpg` et la clé du
-serveur vérifiée dans `podcast/known_hosts`, ou via `PODCAST_KNOWN_HOSTS`.
+SFTP et `PODCAST_SITE_URL` dans `.env`. Cette URL est la base commune, sans suffixe
+de langue ; le code ajoute `/en/` ou `/fr/`. Fournir `podcast/cover.jpg`.
+Le Compose actuel monte `/home/seb/.ssh/known_hosts` vers
+`/root/.ssh/known_hosts` : ce fichier hôte doit exister et contenir la clé
+vérifiée du serveur SFTP. La variable `PODCAST_KNOWN_HOSTS` créée par
+l'initialisation n'est pas utilisée par ce montage.
 
 ```bash
 # Vérifie les fichiers et prépare le RSS local, sans transfert
@@ -230,6 +318,14 @@ Le nom distant inclut la date et l’empreinte SHA-256 du MP3. Publier le même 
 pour la même date conserve une seule entrée RSS et sa date de publication.
 Conserver `podcast/state/` pour préserver les épisodes.
 
+Les états sont séparés : `episodes-en.json` et `episodes-fr.json`. Le mode
+`podcast --dry-run` écrit le RSS local, mais ne transfère rien et ne sauvegarde
+pas l'état des épisodes. La publication réelle transfère d'abord le MP3 et la
+couverture, remplace le RSS distant atomiquement, purge uniquement les anciens
+MP3 de briefing reconnus, puis sauvegarde l'état local. Le serveur doit prendre
+en charge le renommage POSIX SFTP. Un contenu audio différent pour la même date
+peut créer un épisode supplémentaire.
+
 ## Feedback
 
 Le mail peut afficher six motifs par article : utile, hors sujet, non applicable,
@@ -239,107 +335,52 @@ Le secret doit correspondre à celui du récepteur PHP et contenir au moins 32 o
 
 Les options de `mail.feedback` sont :
 
-Avant la sélection, le briefing lit les `briefing.md` des sept jours précédents dans `output/daily/AAAA-MM-JJ/en/` ou, à défaut, `fr/`. Il ne compare pas les deux éditions d’une même journée, ni celle du jour en cours. Aucun historique JSON supplémentaire n’est créé. Sans briefing antérieur, aucun contrôle n’est effectué.
-
-Les événements sans résumé exploitable dont toutes les URL sources ont déjà été utilisées sont exclus. Avec du contenu disponible, une URL déjà traitée est soumise à l’arbitrage de nouveauté pour préserver les évolutions substantielles. Pour les nouvelles sources ou reformulations FR/EN, MiniLM repère les événements proches ; Qwen confirme s’il s’agit du même événement sans information nouvelle. Une évolution substantielle est conservée, et un thème commun ne suffit pas à exclure un sujet. La détection sémantique reste probabiliste.
-
-La configuration `briefing.history.days` règle la fenêtre (7 par défaut, 0 pour désactiver) et `similarity_threshold` le seuil de présélection sémantique (0.72). Le modèle MiniLM est partagé avec le regroupement pour éviter un deuxième chargement. Les exclusions sont consignées dans les logs. Les fichiers existants ne sont pas modifiés. Une erreur de lecture ou d’évaluation arrête la génération plutôt que d’ignorer silencieusement le contrôle.
-
-## Retours utilisateur et apprentissage local
-
-Une boucle optionnelle de votes par motif est préparée :
-
-```text
-Bouton du mail → confirmation PHP publique dans /feedback/
-  → fichiers JSON privés hors racine Web
-  → pull local → stockage PostgreSQL → confirmation et purge des retours importés
-  → personnalisation et apprentissage locaux → sélection du prochain briefing
-```
-
-Aucun modèle ni base distante.
-Les sources du composant public sont conservées dans [web/](web/),
-avec un exemple de configuration privée sans secrets. Le script PHP et son `.htaccess` sont déployés sur l’hébergement du podcast.
-Le `.htaccess` demande aussi aux robots de ne pas indexer les pages. Cela ne
-bloque pas les vérifications automatiques de Gmail : le GET reste sans vote,
-avec confirmation POST par défaut pour éviter les fausses annotations.
-Pour l’essai demandé, le vote dès le clic est activé dans la configuration
-PHP privée (`require_confirmation: false`, syntaxe PHP `=> false`). Remettre
-`require_confirmation` à `true` rétablit la confirmation, sans renvoyer les mails.
-Ce mode expérimental peut enregistrer les visites des vérificateurs Gmail ;
-le clic ouvre toujours une page Web.
-La personnalisation commence en parallèle ; l'entraînement supervisé CPU dispose
-de commandes séparées et n'active aucun modèle automatiquement.
-
-La fonctionnalité est désactivée par défaut dans `config/feedback.yaml`. Appliquer
-la migration `app/sql/005_feedback.sql`, préparer le composant public et vérifier
-ses permissions avant activation. L'URL vient de `FEEDBACK_URL` dans `.env`, avec
-deux secrets distincts pour les liens et l'API. Les briefings existants ne sont
-pas régénérés. Le composant public a été déployé le 12 octobre 2026 par SFTP :
-`/home/chaucha/podcast/feedback/` pour PHP et
-`/home/chaucha/ai-news-feedback-private/pending/` pour les JSON privés.
-La confirmation POST, le double envoi, le pull authentifié et l’ack exact ont
-été vérifiés en HTTPS avec un retour technique sauvegardé localement puis purgé.
-La migration PostgreSQL 005 a ensuite été appliquée et un import manuel réel
-a stocké deux retours avant confirmation et purge ; la file publique est vide.
-Ces retours de test sont conservés comme non résolus jusqu’au rattachement de
-leurs présentations. L’import automatique et la personnalisation restent désactivés.
-
-Des mails de test FR/EN ont été préparés à partir des briefings existants du
-12 octobre 2026 dans `output/feedback-email-test/2026-10-12/{fr,en}/` : ouvrir
-`email.html` pour l'aperçu ou `email.eml` dans un logiciel de messagerie.
-Chaque édition contient 14 événements et 84 liens signés vérifiés. À la demande
-de l'utilisateur, les deux mails portant un objet `[TEST FR]` ou `[TEST EN]` ont
-été acceptés par le serveur SMTP pour le destinataire configuré dans `.env`.
-Cela ne confirme pas leur arrivée en boîte de réception. Les reçus locaux
-`smtp-receipt.json` conservent la trace de l'envoi. Aucun podcast n'a été
-régénéré et les briefings originaux restent intacts.
-Un nouvel envoi FR/EN avec l’objet `[TEST FEEDBACK …]` a été accepté par SMTP
-pour tester le mode sans confirmation. La collecte suivante a importé 11 retours
-sans erreur, puis confirmé leur purge ; la file publique est vide.
-Les liens et identités initiaux sont réutilisés : un même lien déjà importé reste
-le même retour, sans double annotation. Les traces sont dans
-`output/feedback-email-test/essai-*/`.
-Les identifiants de ces copies sont propres au test, communs FR/EN et non
-enregistrés en base ; le test complet exige encore leur enregistrement local et l’import PostgreSQL. Ces fichiers contenant des liens signés restent privés.
-
-Audit PHP ciblé : plafond de 12 retours en attente par présentation, refus des
-POST cross-site, erreurs PHP masquées et fichiers publics limités au script.
-Correctifs déployés et vérifiés en HTTPS. Le mode direct reste sensible aux
-robots Gmail et aux liens volés ; l’hébergement n’a pas fait l’objet d’un audit complet.
-
-Première analyse locale : 13 soumissions, 11 présentations notées sur 14 ;
-6 votes effectifs « utile », 3 « hors sujet », 2 « déjà traité ».
-Rapports dans `output/feedback-analysis/20261012T122813Z/`.
-L’apprentissage a été lancé mais n’a créé aucun modèle : les présentations de
-test restent non résolues et les caractéristiques d’entraînement manquent.
-
-Voir [docs/feedback.md](docs/feedback.md) pour le protocole, les commandes,
-les tests, les limites d'évaluation et le retour arrière.
-
-## Configuration utile
-
-| Fichier | Rôle |
+| Option | Rôle |
 |---|---|
-| `config/sources.yaml` | Catalogue RSS/Atom et activation des sources |
-| `config/scoring.yaml` | Mots-clés et pondérations du score historique |
-| `config/briefing.yaml` | Fenêtre, sélection, Qwen et bonus métier du scorer |
-| `config/watchlists.yaml` | Inclusion, exclusion et technologies suivies |
-| `config/semantic_scoring.yaml` | Descriptions des domaines pour MiniLM |
-| `config/glossary.yaml` | Termes protégés pendant la traduction |
-| `config/audio.yaml` | Moteur, voix et paramètres MP3 |
-| `config/podcast.yaml` | Métadonnées publiques, SFTP et rétention |
-| `config/feedback.yaml` | Activation, limites d’import et personnalisation (URL/secrets dans `.env`) |
-| `config/mail.yaml` | Objet par langue et paramètres SMTP (adresses dans `.env`) |
+| `enabled` | Active les liens quand l’URL est renseignée ; valeur par défaut : `true` |
+| `link_days` | Durée depuis la date d’édition ; valeur par défaut : 90 jours |
+| `newsletter_enabled` | Active les choix « Équilibrée », « Trop cyber », « Trop IA » ; `true` dans le YAML fourni, `false` si absent |
+
+Les boutons globaux portent sur la journée entière, avec une identité commune
+aux éditions EN/FR. Les boutons d'article portent sur l'événement publié et
+ses sources. Les deux types de votes restent distincts. Le même secret de
+signature est utilisé pour ces deux types de liens, avec des champs et motifs validés.
+
+Le récepteur est `web/public/feedback.php` (PHP >= 8.1). Sa configuration privée,
+ses secrets et ses fichiers de votes restent hors de la racine web ; un exemple
+est fourni dans `web/private.example/config.php`. En mode GET direct, la durée
+`link_seconds` doit correspondre à `mail.feedback.link_days`.
+
+Le déploiement du PHP est distinct de celui du podcast : ni Compose ni
+`run-daily.sh` ne le mettent à jour. La version distante doit reconnaître les
+motifs `newsletter_*` et `briefing_date` pour accepter les boutons globaux.
+Configurer `FEEDBACK_PRIVATE_CONFIG` sur l'hébergement, ou adapter la constante
+`PRIVATE_CONFIG`, sans remplacer la configuration privée lors d'une mise à jour.
+Le secret d'API des actions `pull`/`ack` est distinct du secret des liens.
 
 Par défaut, GET affiche une confirmation et POST enregistre le vote. Le mode
 `require_confirmation: false` permet le vote direct mais expose aux votes de
 scanners mail. Ne pas suivre les liens réels pour un contrôle automatique.
 
-`feedback/importer.py` fournit la récupération authentifiée, le stockage
-PostgreSQL puis l’acquittement des identifiants enregistrés. Les votes d’article
-et les votes globaux sont stockés séparément ; les répétitions connues ne créent
-pas de doublon. La synchronisation n’est pas intégrée à `run-daily.sh` et aucun
-entraînement automatique n’est implémenté.
+`feedback/importer.py` fournit les classes `Client`, `Store` et la fonction
+`synchronize` : récupération HTTPS authentifiée, validation, transaction locale,
+puis acquittement des seuls identifiants stockés. L'acquittement supprime les
+JSON concernés de la file distante. Les conflits ne sont pas acquittés.
+Les votes d'article sont enregistrés dans `feedback_returns` et les votes
+globaux dans `feedback_newsletter_returns`. Les vues `feedback_effective_*`
+retiennent le dernier choix par présentation.
+
+Cet importeur est une bibliothèque, sans CLI ni planification intégrée. Aucune
+section de configuration d'import automatique n'est fournie. Le pipeline ne
+personnalise pas la sélection à partir des votes et n'entraîne aucun modèle.
+Les tables de candidats, de cache et d'historique de feedback ne constituent
+pas, à elles seules, un système d'apprentissage actif.
+
+`app/import_feedback_archive.py` est un outil manuel distinct : il rattache des
+présentations bilingues provenant d'archives de tests déjà présentes dans
+`feedback_runs`, sans inventer de caractéristiques ML historiques ni modifier
+les votes. Son option `--archive-id` désigne une archive existante ; son exécution
+écrit en base et n'est pas une commande d'observation.
 
 ## Planification et journaux
 
@@ -364,11 +405,135 @@ Le verrou `/run/ai-news.lock` empêche deux pipelines simultanés. Le journal
 archives avec compression différée. Les journaux de PostgreSQL et Ollama restent
 accessibles par `docker compose logs`.
 
+## Healthcheck et reprise des étapes
+
+`mailer/healthcheck.py` inspecte les fichiers et marqueurs d'une édition. Il ne
+répare rien par lui-même. `run-daily.sh --healthcheck` utilise ce diagnostic,
+reprend les étapes autorisées du pipeline existant sous le même verrou, puis
+réévalue l'édition. Une erreur arrête les traitements ; le contrôle final tente
+d'envoyer une alerte si l'édition reste incomplète.
+
+| Réglage `healthcheck` | Valeur fournie |
+|---|---|
+| `calendar` | `hourly`, calendrier systemd installé par `post-install.sh` |
+| `timezone` | `Europe/Paris`, à aligner avec le fuseau du cron quotidien |
+| `daily_start_hour` / `grace_hours` | `4` / `2` : édition attendue après 06:00 |
+| `daily_dir` | `/output/daily` ; requis par l'orchestrateur actuel |
+| `log_path` | `/var/log/ai-news.log` |
+| `log_tail_lines` / `log_max_bytes` | 200 lignes / 65 536 octets maximum lus |
+| `repair.enabled` | `true` ; reprise désactivée si cette option est absente |
+| `repair.stages` | `markdown`, `preview`, `mail`, `audio`, `podcast` |
+
+Avant l'échéance, le contrôle porte sur la veille ; après, sur le jour courant.
+Il ne parcourt pas automatiquement toutes les anciennes journées. `--date`
+permet d'en choisir une, y compris aujourd'hui, sans attendre l'échéance.
+
+### Diagnostic sans réparation
+
+```bash
+# Lecture de l'état et de la politique, sans SMTP ni écriture de sortie/journal
+./run-daily.sh --healthcheck --dry-run
+# Même diagnostic pour une journée précise
+./run-daily.sh --healthcheck --dry-run --date 2026-10-10
+```
+
+Ces commandes créent des conteneurs temporaires. La liste d'étapes affichée par
+`--repair-plan` indique les autorisations, pas une liste de réparations garanties.
+
+### Reprise réelle et surveillance horaire
+
+```bash
+# Écrit les sorties/marqueurs ; peut envoyer des mails et publier par SFTP
+sudo ./run-daily.sh --healthcheck
+# Reprise d'une journée précise, avec les mêmes effets possibles
+sudo ./run-daily.sh --healthcheck --date 2026-10-10
+# Installe et active uniquement le service/timer de surveillance
+sudo ./post-install.sh --healthcheck-only
+```
+
+Cette installation est distincte de `sudo ./post-install.sh`, qui installe le
+cron quotidien. Elle exige l'image `mailer` à jour, le journal existant,
+`daily_dir: /output/daily` et un fuseau identique à celui du serveur. Elle crée
+`ai-news-healthcheck.service` et `ai-news-healthcheck.timer` et active le timer.
+Modifier `calendar` nécessite de relancer cette installation. Les autres réglages
+sont relus aux contrôles suivants.
+
+| Marqueur absent | Étape reprise si autorisée |
+|---|---|
+| `generated` | Sélection, synthèse et génération EN/FR complètes |
+| `<langue>/mail.done` | Mail de cette langue |
+| `<langue>/audio.done` | Audio de cette langue |
+| `<langue>/podcast.done` | Publication du podcast de cette langue |
+
+La reprise ne relance ni collecte ni scoring. L'aperçu HTML manquant peut être
+recréé sans envoi. Sans `generated`, la génération peut remplacer les Markdown
+partiels existants ; elle est refusée si un marqueur de mail, audio ou podcast
+atteste déjà une étape aval terminée. Un marqueur `generated` présent avec un
+Markdown manquant, ou un podcast terminé sans marqueur audio, arrête la reprise.
+Un marqueur audio présent avec MP3 manquant déclenche le diagnostic, mais le
+mode healthcheck ne relance pas cette étape déjà marquée terminée.
+
+Un verrou occupé diffère le contrôle sans interrompre le pipeline. Une alerte
+est envoyée à `RECIPIENT` dans `.env`, avec l'objet configuré, les étapes restantes,
+le statut de reprise et une pièce jointe contenant la fin du journal. Les URL
+et secrets reconnus sont masqués. Cet extrait peut concerner d'autres exécutions
+et ne pas contenir une ancienne panne après rotation. Une alerte est répétée
+au contrôle suivant si l'édition attendue reste incomplète ; aucune alerte n'est
+envoyée si elle est complète. Une panne Docker ou SMTP peut empêcher l'alerte ;
+consulter alors le journal systemd.
+
+Un marqueur absent ne prouve pas que l'effet externe n'a pas eu lieu : une
+reprise du mail peut produire un doublon après une interruption postérieure à
+l'acceptation SMTP. Les marqueurs n'attestent ni la réception des mails ni
+l'accessibilité distante des podcasts. La rétention du podcast reste applicable
+aux journées anciennes.
+
+```bash
+systemctl list-timers ai-news-healthcheck.timer
+sudo journalctl -u ai-news-healthcheck.service -n 100
+# Arrête la surveillance automatique, sans supprimer les données
+sudo systemctl disable --now ai-news-healthcheck.timer
+```
+
+Mettre `healthcheck.repair.enabled: false` conserve le diagnostic et les alertes,
+sans reprise automatique.
+
+## Repères du dépôt
+
+| Emplacement | Responsabilité |
+|---|---|
+| `app/collector.py`, `normalizer.py`, `source_health.py` | Collecte, texte normalisé, désactivation sûre des sources |
+| `app/scorer.py` | Score historique et bonus métier en base |
+| `app/sql/001` à `006` | Sources/articles, normalisation, scoring, vue GUID et tables de feedback |
+| `embeddings/briefing.py` | Filtres, regroupement, historique, Qwen, MarianMT et Markdown |
+| `embeddings/prompts.py`, `watchlist.py`, `vulnerability_detector.py`, `glossary.py` | Validation des prompts et règles du briefing |
+| `embeddings/worker.py` | Diagnostic manuel MiniLM, sans persistance |
+| `audio/tts.py` | Extraction Markdown, synthèse vocale et conversion MP3 |
+| `mailer/send.py`, `feedback_links.py`, `healthcheck.py` | Mail, liens signés et inspection des étapes |
+| `podcast/publish.py` | Épisodes, RSS, transfert SFTP et rétention |
+| `web/public/feedback.php`, `web/private.example/config.php` | Récepteur web et exemple de configuration privée |
+| `feedback/importer.py`, `app/import_feedback_archive.py` | Synchronisation des votes et rattachement manuel d'archives |
+| `run-daily.sh`, `init-repo.sh`, `post-install.sh` | Orchestration, initialisation et planification sur l'hôte |
+| `project_config.py`, `config.yaml` | Accès commun et configuration applicative |
+| `tests/` | Tests unitaires et intégrations optionnelles PHP/PostgreSQL isolées |
+
 ## Limites et repères
 
 Les articles sans date sont exclus du briefing. Une date RSS erronée peut fausser
 la sélection. La vue `unique_articles` déduplique par GUID ; le briefing déduplique
 les événements. Les synthèses et traductions demandent une vérification humaine.
 
+Une synthèse Qwen en erreur peut retirer un événement des deux éditions ; une
+erreur MarianMT bloque l'édition FR entière. L'applicabilité à l'infrastructure
+réelle n'est pas déduite des noms de produits : elle reste « inconnue ».
+La table `glossary.translations` est chargée, mais le traducteur actuel restaure
+les termes protégés à l'identique sans appliquer cette table de substitutions.
+Les caches de modèles sont locaux ; le premier chargement peut nécessiter
+Internet si les modèles ne sont pas disponibles. Aucun lecteur web ou portail
+de briefing n'est généré par le code présent.
+
 Les scripts du schéma PostgreSQL sont dans `app/sql/`. Les tests sont dans `tests/`.
+Les tests PHP peuvent démarrer un récepteur temporaire sur l'interface locale ;
+ceux de PostgreSQL sont optionnels via `AI_NEWS_TEST_PG_BIN` et
+`AI_NEWS_TEST_PG_SHARE`. Leur présence ne vaut pas validation de l'installation.
 Les règles de contribution et de validation sont dans [AGENTS.md](AGENTS.md).

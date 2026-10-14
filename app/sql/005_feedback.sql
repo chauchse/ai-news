@@ -1,10 +1,12 @@
--- Additive migration. No foreign key to articles: source purges must not erase learning.
+-- Preserve the existing feedback schema and archived test data.
+-- Additive, rerunnable; does not enable mail buttons or ML in the current pipeline.
 CREATE TABLE IF NOT EXISTS feedback_events (
     id TEXT PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE TABLE IF NOT EXISTS feedback_aliases (
     alias TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES feedback_events(id)
 );
+-- Deliberately no FK to articles: collection purges must not erase learning history.
 CREATE TABLE IF NOT EXISTS feedback_event_articles (
     event_id TEXT NOT NULL REFERENCES feedback_events(id), article_id BIGINT NOT NULL,
     source_key TEXT NOT NULL, PRIMARY KEY(event_id, article_id)
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS feedback_candidates (
     errors JSONB NOT NULL DEFAULT '[]', editions JSONB NOT NULL DEFAULT '{}',
     UNIQUE(briefing_id, event_id)
 );
+-- Unknown presentations must remain importable and durable, hence no presentation FK.
 CREATE TABLE IF NOT EXISTS feedback_returns (
     id TEXT PRIMARY KEY, submission_id TEXT NOT NULL UNIQUE,
     presentation_id TEXT NOT NULL, reason TEXT NOT NULL CHECK (reason IN
@@ -39,7 +42,6 @@ CREATE TABLE IF NOT EXISTS feedback_runs (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), kind TEXT NOT NULL, report JSONB NOT NULL
 );
--- Unresolved returns are deliberately retained; joining a future candidate resolves them.
 CREATE OR REPLACE VIEW feedback_effective_returns AS
 SELECT DISTINCT ON (presentation_id) * FROM feedback_returns
 ORDER BY presentation_id, submitted_at DESC, id DESC;

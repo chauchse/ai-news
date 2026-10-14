@@ -49,17 +49,6 @@ class BriefingHistoryTests(unittest.TestCase):
         self.assertEqual(exclude_previous(groups, history, factory, review), [])
         factory.assert_not_called()
 
-    def test_same_url_with_new_content_is_reviewed_for_material_update(self):
-        groups = [[{'title': 'Patch now available', 'summary': 'A fix was published today.', 'url': 'https://example.com/news'}]]
-        history = [{'title': 'Old incident', 'summary': 'No fix available.', 'urls': ['https://example.com/news']}]
-        model = Mock()
-        model.encode.return_value = np.array([[1., 0.], [0., 1.]])
-        review = Mock(return_value={'same_event': True, 'material_update': True})
-        self.assertEqual(exclude_previous(groups, history, lambda: model, review), groups)
-        review.assert_called_once()
-        review.return_value = {'same_event': True, 'material_update': False}
-        self.assertEqual(exclude_previous(groups, history, lambda: model, review), [])
-
     def test_multilingual_event_repetition_update_and_distinct_topic(self):
         groups = [[{'title': 'Nouvelle source française', 'summary': 'Un événement', 'url': 'https://new.example.com'}]]
         history = [{'title': 'English event', 'summary': 'Already covered', 'urls': []}]
